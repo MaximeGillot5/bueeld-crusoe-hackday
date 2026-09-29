@@ -708,9 +708,12 @@ async function apiProject(req, res, path) {
     if (path === '/api/projects/current/maturity' && req.method === 'GET') {
       return respond(res, 200, await maturityStore.getSnapshot(project));
     }
-    const milestone = /^\/api\/projects\/current\/milestones\/([a-z_]+)\/(validate|criterion|answers|complete)$/.exec(path);
+    const milestone = /^\/api\/projects\/current\/milestones\/([a-z_]+)\/(validate|criterion|answers|complete|reset)$/.exec(path);
     if (milestone?.[2] === 'answers' && req.method === 'PUT') {
       return respond(res, 410, { error: 'Mission answers must be analyzed by Lia in chat before they can be saved.' });
+    }
+    if (milestone?.[2] === 'reset' && req.method === 'POST') {
+      return respond(res, 200, await maturityStore.resetGuidedMission({ ...project, milestoneId: milestone[1] }));
     }
     if (milestone?.[2] === 'complete' && req.method === 'POST') {
       const input = await readJSON(req, 3_000);

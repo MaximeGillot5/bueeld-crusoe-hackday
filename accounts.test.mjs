@@ -82,7 +82,15 @@ try {
   const created = await call('POST', '/api/conversations', { cookie: cookieA, 'x-lab-csrf': signupA.body.csrfToken }, payload);
   assert.equal(created.status, 201);
   const id = created.body.conversation.id;
+  const secondPayload = { ...payload, title: 'Pricing ideas', messages: [{ id: 'm2', role: 'user', content: 'Which price should we test?', at: Date.now(), status: 'complete' }], pinnedMission: null, sourceContexts: [], onboardingDraft: null };
+  const secondCreated = await call('POST', '/api/conversations', { cookie: cookieA, 'x-lab-csrf': signupA.body.csrfToken }, secondPayload);
+  assert.equal(secondCreated.status, 201);
+  const secondId = secondCreated.body.conversation.id;
+  assert.notEqual(secondId, id);
+  assert.deepEqual(new Set((await call('GET', '/api/conversations', { cookie: cookieA })).body.conversations.map((item) => item.id)), new Set([id, secondId]));
+  assert.equal((await call('GET', `/api/conversations/${secondId}`, { cookie: cookieA })).body.conversation.messages[0].content, 'Which price should we test?');
   assert.equal((await call('GET', `/api/conversations/${id}`, { cookie: cookieB })).status, 404);
+  assert.equal((await call('GET', `/api/conversations/${secondId}`, { cookie: cookieB })).status, 404);
   assert.deepEqual((await call('GET', '/api/conversations', { cookie: cookieB })).body.conversations, []);
   assert.equal((await call('PUT', `/api/conversations/${id}`, { cookie: cookieB, 'x-lab-csrf': signupB.body.csrfToken }, payload)).status, 404);
   assert.equal((await call('DELETE', `/api/conversations/${id}`, { cookie: cookieB, 'x-lab-csrf': signupB.body.csrfToken })).status, 404);
@@ -91,6 +99,7 @@ try {
   const updated = await call('PUT', `/api/conversations/${id}`, { cookie: cookieA, 'x-lab-csrf': signupA.body.csrfToken }, { ...payload, title: 'Revised founder idea' });
   assert.equal(updated.status, 200);
   assert.equal(updated.body.conversation.title, 'Revised founder idea');
+  assert.equal((await call('GET', `/api/conversations/${secondId}`, { cookie: cookieA })).body.conversation.title, 'Pricing ideas');
   const dataDir = join(isolated, '.data');
   const file = join(dataDir, 'accounts.json');
   assert.equal((await stat(dataDir)).mode & 0o777, 0o700);
@@ -99,11 +108,15 @@ try {
   assert.equal(disk.includes('this-is-a-good-password'), false);
   assert.equal(disk.includes('a@example.test'), true);
   assert.equal(disk.includes('Revised founder idea'), true);
+  assert.equal(disk.includes('Pricing ideas'), true);
   const reload = await import(`${pathToFileURL(join(isolated, 'accounts.mjs')).href}?reload=1`);
   const afterReload = await (async () => { const x = request('GET', `/api/conversations/${id}`, { cookie: cookieA }); await reload.handleAccountRoute(x.req, x.res, x.url); return x.res; })();
   assert.equal(afterReload.status, 200);
   assert.equal(JSON.parse(afterReload.body).conversation.sourceContexts.length, 1);
   assert.deepEqual(JSON.parse(afterReload.body).conversation.onboardingDraft.answers, ['Founder problem', 'Target user']);
+  const secondAfterReload = await (async () => { const x = request('GET', `/api/conversations/${secondId}`, { cookie: cookieA }); await reload.handleAccountRoute(x.req, x.res, x.url); return x.res; })();
+  assert.equal(secondAfterReload.status, 200);
+  assert.equal(JSON.parse(secondAfterReload.body).conversation.messages[0].content, 'Which price should we test?');
   const afterReloadTracker = await (async () => { const x = request('GET', '/api/mission-tracker', { cookie: cookieA }); await reload.handleAccountRoute(x.req, x.res, x.url); return x.res; })();
   assert.equal(JSON.parse(afterReloadTracker.body).missionTracker.records.length, 1);
   assert.deepEqual(JSON.parse(afterReloadTracker.body).missionTracker.records[0].learning, learning);
@@ -128,6 +141,9 @@ try {
   assert.deepEqual((await call('GET', '/api/project-memory', { cookie: login.headers['Set-Cookie'].split(';')[0] })).body.projectMemory, projectMemory);
   assert.equal((await call('GET', `/api/conversations/${id}`, { cookie: login.headers['Set-Cookie'].split(';')[0] })).status, 200);
   assert.equal((await call('DELETE', `/api/conversations/${id}`, { cookie: login.headers['Set-Cookie'].split(';')[0], 'x-lab-csrf': login.body.csrfToken })).status, 200);
+  assert.equal((await call('GET', `/api/conversations/${secondId}`, { cookie: login.headers['Set-Cookie'].split(';')[0] })).status, 200);
+  assert.deepEqual((await call('GET', '/api/conversations', { cookie: login.headers['Set-Cookie'].split(';')[0] })).body.conversations.map((item) => item.id), [secondId]);
+  assert.equal((await call('DELETE', `/api/conversations/${secondId}`, { cookie: login.headers['Set-Cookie'].split(';')[0], 'x-lab-csrf': login.body.csrfToken })).status, 200);
   assert.deepEqual((await call('GET', '/api/conversations', { cookie: login.headers['Set-Cookie'].split(';')[0] })).body.conversations, []);
   const activeCookie = login.headers['Set-Cookie'].split(';')[0];
   assert.equal((await call('DELETE', '/api/auth/account', { cookie: activeCookie, 'x-lab-csrf': login.body.csrfToken }, { password: 'wrong-password-12' })).status, 401);
@@ -138,5 +154,5 @@ try {
   assert.equal((await call('GET', '/api/auth/session', { cookie: cookieB })).body.authenticated, true);
   assert.equal((await readFile(file, 'utf8')).includes('a@example.test'), false);
   assert.equal((await readFile(file, 'utf8')).includes(projectMemory.project), false);
-  console.log('Lab account tests passed: CSRF, hashes, rotation, user isolation, private atomic store, reload, CRUD, mission learning, project memory and logout race, onboarding, account deletion.');
+  console.log('Lab account tests passed: CSRF, hashes, rotation, user isolation, multiple persistent conversations, private atomic store, reload, CRUD, mission learning, project memory and logout race, onboarding, account deletion.');
 } finally { await rm(isolated, { recursive: true, force: true }); }

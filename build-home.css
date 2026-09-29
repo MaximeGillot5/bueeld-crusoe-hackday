@@ -34,6 +34,43 @@ body { background: var(--build-bg); color: var(--build-text); }
 .chat-view-toolbar-actions .chat-demo-button:hover:not(:disabled) { border-color: #92bf91; background: #dcefd7; }
 .chat-demo-button .chat-demo-label-short { display: none; }
 .chat-demo-button span[aria-hidden="true"] { font-size: 15px; line-height: 1; }
+
+.chat-view-toolbar { position: relative; z-index: 4; }
+.chat-view-toolbar-primary { display: flex; flex: 1 1 auto; align-items: center; gap: 8px; min-width: 0; }
+.chat-view-toolbar-actions { flex: 0 0 auto; }
+.chat-thread-switcher { position: relative; flex: 0 1 270px; min-width: 0; }
+.chat-thread-trigger, .chat-new-button { display: inline-flex; align-items: center; min-height: 38px; border: 1px solid #c8dac4; border-radius: 10px; background: #fffefa; color: #315f41; font-size: 12px; font-weight: 700; }
+.chat-thread-trigger { width: 100%; gap: 8px; padding: 5px 6px; text-align: left; box-shadow: 0 1px 3px rgb(36 75 42 / 5%); transition: border-color .16s ease, background .16s ease, box-shadow .16s ease; }
+.chat-thread-trigger:hover:not(:disabled), .chat-thread-trigger[aria-expanded="true"] { border-color: #85b88c; background: #fbfdf9; box-shadow: 0 2px 8px rgb(36 75 42 / 9%); }
+.chat-thread-trigger:focus-visible, .chat-new-button:focus-visible { outline: 3px solid #79ad82; outline-offset: 2px; }
+.chat-thread-trigger:disabled, .chat-new-button:disabled { cursor: not-allowed; opacity: .55; }
+.chat-thread-icon { flex: 0 0 auto; width: 26px; height: 26px; border-radius: 7px; padding: 4px; background: #e8f2e5; color: #427854; }
+.chat-thread-icon path, .chat-thread-chevron path { fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
+.chat-thread-title { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.chat-thread-title-mobile { display: none; }
+.chat-thread-count { flex: 0 0 auto; min-width: 20px; border-radius: 10px; padding: 1px 5px; background: #e7f1e2; color: #477052; font-size: 10px; text-align: center; }
+.chat-thread-chevron { flex: 0 0 auto; width: 24px; height: 24px; margin-left: auto; border-radius: 6px; padding: 4px; background: #f0f5ed; color: #5d8066; transition: transform .16s ease, background .16s ease; }
+.chat-thread-trigger[aria-expanded="true"] .chat-thread-chevron { transform: rotate(180deg); background: #e4f0df; }
+.chat-new-button { flex: 0 0 auto; gap: 6px; padding: 6px 12px; background: #eaf4e6; }
+.chat-new-button:hover:not(:disabled) { border-color: #94bd91; background: #dcefd7; }
+.chat-new-button > span:first-child { font-size: 19px; line-height: .7; font-weight: 400; }
+.chat-thread-panel { position: absolute; top: calc(100% + 8px); left: 0; z-index: 20; display: flex; flex-direction: column; width: min(340px, calc(100vw - 24px)); max-height: min(420px, calc(100dvh - 150px)); overflow: hidden; border: 1px solid #d7e4d2; border-radius: 12px; background: #fffefa; box-shadow: 0 18px 42px rgb(31 58 37 / 17%); }
+.chat-thread-panel-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; border-bottom: 1px solid #e5ece1; padding: 13px 15px; }
+.chat-thread-panel-head strong { font-size: 12px; }
+.chat-thread-panel-head small { color: #7b917e; font-size: 10px; white-space: nowrap; }
+.chat-thread-list { min-height: 0; overflow-y: auto; padding: 6px; }
+.chat-thread-item { display: grid; width: 100%; gap: 2px; border: 1px solid transparent; border-radius: 8px; padding: 9px 10px; background: transparent; color: #294733; text-align: left; }
+.chat-thread-item:hover:not(:disabled), .chat-thread-item:focus-visible { background: #edf5e9; }
+.chat-thread-item.is-current { border-color: #cfe2c8; background: #f0f7ec; }
+.chat-thread-item strong { overflow: hidden; font-size: 12px; font-weight: 700; text-overflow: ellipsis; white-space: nowrap; }
+.chat-thread-item small { color: #78907d; font-size: 10px; }
+.chat-thread-item:disabled { cursor: wait; opacity: .6; }
+.chat-thread-empty, .chat-thread-guest { margin: 0; padding: 16px; color: #718575; font-size: 12px; line-height: 1.5; }
+.chat-thread-guest { border-top: 1px solid #e5ece1; }
+.chat-thread-guest p { margin: 0 0 10px; }
+.chat-thread-guest button { min-height: 32px; border: 1px solid #bdd7b8; border-radius: 7px; padding: 5px 10px; background: #eaf4e6; color: #315f41; font-size: 11px; font-weight: 700; }
+.chat-thread-guest button:hover { background: #dcefd7; }
+
 .app-main { background: var(--build-bg); }
 .build-view { height: 100%; overflow: auto; overscroll-behavior-y: contain; background-color: var(--build-bg); background-image: radial-gradient(#32463966 .55px, transparent .55px); background-size: 22px 22px; }
 .build-page-shell { width: min(1200px, 100%); margin: 0 auto; padding: clamp(26px, 4.2vw, 58px) clamp(20px, 4vw, 58px) 64px; }
@@ -333,6 +370,58 @@ body { background: var(--build-bg); color: var(--build-text); }
 .build-roadmap-empty { grid-column: 1 / -1; display: grid; justify-items: start; gap: 12px; border: 1px dashed #c6d9c2; border-radius: 13px; padding: 34px; background: #f0f6ed; }
 .build-roadmap-empty h2 { margin: 0; color: #244a34; font-size: 23px; letter-spacing: -.035em; }
 .build-roadmap-empty p { margin: 0 0 4px; color: #687d6d; font-size: 13px; }
+/* Keep the existing roadmap layout while making the active mission easy to find. */
+.build-roadmap-switcher { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 5px; width: min(680px, 100%); margin: 0 0 22px; border: 1px solid #dce6d9; border-radius: 14px; padding: 5px; background: #edf2e9; }
+.build-roadmap-tab { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-width: 0; min-height: 42px; border: 1px solid transparent; border-radius: 10px; padding: 8px 12px; background: transparent; color: #64786a; font-size: 12px; font-weight: 650; line-height: 1.3; text-align: center; cursor: pointer; transition: background .16s ease, color .16s ease, box-shadow .16s ease; }
+.build-roadmap-tab:hover { background: #f9fbf6; color: #345a3e; }
+.build-roadmap-tab.is-active, .build-roadmap-tab[aria-selected="true"] { border-color: #d6e4d3; background: #fffefa; color: #294d37; box-shadow: 0 2px 7px #31563812; }
+.build-roadmap-tab.is-progress { color: #2d7146; }
+.build-roadmap-tab.is-progress:not(.is-active):not([aria-selected="true"]) { background: #e0efdc; }
+.build-roadmap-tab.is-progress.is-active, .build-roadmap-tab.is-progress[aria-selected="true"] { border-color: #286643; background: #2d7049; color: #fff; box-shadow: 0 4px 12px #2d70492b; }
+.build-roadmap-tab-count { display: inline-grid; flex: 0 0 auto; place-items: center; min-width: 21px; height: 21px; border-radius: 7px; padding: 0 5px; background: #e6eee3; color: #58745d; font-family: ui-monospace, SFMono-Regular, monospace; font-size: 10px; font-weight: 750; font-variant-numeric: tabular-nums; }
+.build-roadmap-tab.is-progress .build-roadmap-tab-count { background: #cae5c9; color: #246b42; }
+.build-roadmap-tab.is-active .build-roadmap-tab-count, .build-roadmap-tab[aria-selected="true"] .build-roadmap-tab-count { background: #e5f0e1; color: #346a44; }
+.build-roadmap-tab.is-progress.is-active .build-roadmap-tab-count, .build-roadmap-tab.is-progress[aria-selected="true"] .build-roadmap-tab-count { background: #ffffff30; color: #fff; }
+.build-roadmap-tab:focus-visible, .build-roadmap-focus-actions button:focus-visible, .build-roadmap-group .build-roadmap-open:focus-visible { outline: 3px solid #4c9362; outline-offset: 2px; }
+.build-roadmap-focus { position: relative; grid-column: 1 / -1; display: grid; gap: 15px; margin: 0 0 22px; overflow: hidden; border: 1px solid #a9d2a9; border-radius: 17px; padding: 24px 27px; background: radial-gradient(circle at 100% 0%, #d7ecd6 0%, transparent 35%), linear-gradient(135deg, #e7f4e3, #f7fbf2 76%); box-shadow: 0 15px 35px #33643b12; }
+.build-roadmap-focus::before { content: ""; position: absolute; inset: 0 auto 0 0; width: 4px; background: #4b9a61; }
+.build-roadmap-focus-top { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 9px 15px; }
+.build-roadmap-focus-kicker { display: inline-flex; align-items: center; gap: 9px; color: #2e784a; font-family: ui-monospace, SFMono-Regular, monospace; font-size: 10px; font-weight: 800; letter-spacing: .11em; text-transform: uppercase; }
+.build-roadmap-focus-kicker::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: #46a368; box-shadow: 0 0 0 4px #cbe8cb; }
+.build-roadmap-focus-title { max-width: 680px; margin: 0; color: #1d5035; font-family: Outfit, Inter, ui-sans-serif, sans-serif; font-size: clamp(22px, 2.8vw, 31px); font-weight: 700; line-height: 1.15; letter-spacing: -.045em; text-wrap: balance; }
+.build-roadmap-focus-copy { max-width: 720px; margin: 0; color: #587461; font-size: 13px; line-height: 1.55; }
+.build-roadmap-focus-progress { display: inline-flex; align-items: center; gap: 9px; width: fit-content; border: 1px solid #bbd9b8; border-radius: 100px; padding: 6px 10px; background: #f6fbf2; color: #2d7348; font-size: 11px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.build-roadmap-focus-progress progress { width: 88px; height: 6px; overflow: hidden; border: 0; border-radius: 6px; background: #d9ead5; accent-color: #4a9a65; }
+.build-roadmap-focus-progress progress::-webkit-progress-bar { border-radius: 6px; background: #d9ead5; }
+.build-roadmap-focus-progress progress::-webkit-progress-value { border-radius: 6px; background: #4a9a65; }
+.build-roadmap-focus-progress progress::-moz-progress-bar { border-radius: 6px; background: #4a9a65; }
+.build-roadmap-focus-question { max-width: 760px; margin: 0; border-left: 2px solid #8dbf8d; padding-left: 12px; color: #3e674a; font-size: 12px; line-height: 1.55; }
+.build-roadmap-focus-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 10px 16px; padding-top: 2px; }
+.build-roadmap-focus-actions > span { max-width: 360px; color: #5e7865; font-size: 11px; line-height: 1.5; }
+.build-roadmap-focus-actions .build-primary-button { min-height: 40px; }
+.build-roadmap-focus-actions .build-text-link { min-height: 38px; }
+.build-roadmap-group li.is-in-progress { align-items: center; border: 1px solid #bfddba; border-radius: 10px; margin: -5px -9px; padding: 7px 9px; background: #edf7e8; color: #285d3b; }
+.build-roadmap-group li.is-in-progress::before { content: "●"; color: #48a368; }
+.build-roadmap-group li.is-in-progress b { color: #35784b; }
+.build-roadmap-state { flex: 0 0 auto; border: 1px solid #bfddba; border-radius: 100px; padding: 3px 7px; background: #e1f1dc; color: #2a7846; font-family: ui-monospace, SFMono-Regular, monospace; font-size: 9px; font-weight: 750; letter-spacing: .035em; text-transform: uppercase; white-space: nowrap; }
+.build-roadmap-past-date { flex: 0 0 auto; color: #768a7b; font-size: 10px; white-space: nowrap; }
+.build-roadmap-empty-view { grid-column: 1 / -1; display: grid; justify-items: start; gap: 8px; border: 1px dashed #c8dac5; border-radius: 14px; padding: 32px; background: #f4f8f0; color: #5e7564; }
+.build-roadmap-empty-view h2, .build-roadmap-empty-view h3 { margin: 0; color: #2e5039; font-size: 19px; letter-spacing: -.03em; }
+.build-roadmap-empty-view p { max-width: 600px; margin: 0; font-size: 12px; line-height: 1.55; }
+.build-roadmap-switcher[hidden], .build-roadmap-focus[hidden], .build-roadmap-empty-view[hidden] { display: none; }
+@media (max-width: 600px) {
+  .build-roadmap-switcher { gap: 3px; margin-bottom: 17px; padding: 4px; }
+  .build-roadmap-tab { gap: 4px; min-height: 43px; padding: 7px 4px; font-size: 10px; }
+  .build-roadmap-tab-count { min-width: 17px; height: 17px; border-radius: 5px; padding: 0 3px; font-size: 9px; }
+  .build-roadmap-focus { gap: 12px; padding: 19px 17px 20px 21px; }
+  .build-roadmap-focus-title { font-size: 24px; }
+  .build-roadmap-focus-actions { align-items: stretch; flex-direction: column; }
+  .build-roadmap-focus-actions .build-primary-button, .build-roadmap-focus-actions .build-text-link { width: 100%; }
+  .build-roadmap-empty-view { padding: 24px 18px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .build-roadmap-tab { transition: none; }
+}
 @media (max-height: 700px) and (min-width: 761px) {
   .build-project-view .build-page-shell { justify-content: flex-start; }
   .build-context-line { padding: 6px 10px; }
@@ -648,6 +737,8 @@ body[data-build-view="lia"] .chat-transcript { background-image: radial-gradient
 #readiness-chat-complete:disabled { border-color: #c7d7c5; background: #c7d7c5; color: #65816a; cursor: default; }
 .readiness-chat-finished > div { display: flex; align-items: center; flex-wrap: wrap; gap: 10px 18px; }
 .readiness-chat-actions { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 8px 18px; margin-top: 15px; }
+#readiness-chat-reset { color: #8a5b42; }
+#readiness-chat-reset:hover { color: #6f3e29; }
 .readiness-chat-status { min-height: 0; margin: 10px 0 0; color: #54735d; font-size: 12px; line-height: 1.45; }
 .readiness-chat-status:empty { display: none; }
 .readiness-chat-status.is-error { color: #a33d3d; }
@@ -674,3 +765,16 @@ body[data-build-view="lia"] .chat-transcript { background-image: radial-gradient
 .readiness-saved-fact dd { margin: 2px 0 0; color: #2d523b; font-size: 11px; line-height: 1.4; overflow-wrap: anywhere; white-space: pre-wrap; }
 .readiness-saved-fact button { margin-top: 9px; border: 0; padding: 0; background: transparent; color: #39734b; font-size: 10px; font-weight: 750; cursor: pointer; }
 .readiness-saved-fact button:hover { text-decoration: underline; }
+
+@media (max-width: 520px) {
+  .chat-view-toolbar { gap: 6px; padding-inline: 10px; }
+  .chat-view-toolbar-primary, .chat-view-toolbar-actions { gap: 5px; }
+  .chat-view-toolbar-actions { margin-left: 0; }
+  .chat-view-toolbar-actions button { min-height: 34px; padding-inline: 8px; }
+  .chat-thread-switcher { flex: 1 1 72px; max-width: 105px; }
+  .chat-thread-trigger { gap: 4px; padding-inline: 4px; }
+  .chat-thread-title, .chat-thread-count { display: none; }
+  .chat-thread-title-mobile { display: inline; font-size: 11px; }
+  .chat-new-button { width: 34px; justify-content: center; padding: 0; }
+  .chat-new-label { display: none; }
+}

@@ -194,7 +194,8 @@ async function postJson(path, body) {
   try {
     response = await fetch(path, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", ...(accountSession.csrfToken ? { "X-Lab-CSRF": accountSession.csrfToken } : {}) },
+      credentials: "same-origin",
       body: JSON.stringify(body)
     });
   } catch {
@@ -1344,9 +1345,15 @@ let chatBusy = false;
 // from the per-conversation, founder-pinned Lab XP missions below.
 const READINESS_GUIDE_KEY = "bueeld-readiness-guided-mission-v1";
 const READINESS_PAUSED_KEY = "bueeld-readiness-guided-paused-v1";
+const READINESS_LAST_KEY = "bueeld-readiness-last-mission-v1";
+const READINESS_CHAT_KEY = "bueeld-readiness-chat-v1";
+const READINESS_CHATS_KEY = "bueeld-readiness-mission-chats-v1";
 const READINESS_TURNS_KEY = "bueeld-readiness-ai-turns-v1";
 let readinessSnapshot = null;
 let readinessMissionId = null;
+let readinessResumeMissionId = null;
+let readinessConversationId = null;
+let readinessMissionChats = new Map();
 let readinessPaused = false;
 let readinessEditIndex = null;
 let readinessBusy = false;
@@ -1354,6 +1361,7 @@ let readinessAnalyzing = false;
 let readinessStatus = "";
 let readinessStatusError = false;
 let readinessCompletion = null;
+let readinessCompletionConversationId = null;
 let readinessRequestId = null;
 let readinessHeldComposer = "";
 let readinessHeldConversationId = null;
@@ -1370,16 +1378,78 @@ function readinessMilestone(id = readinessMissionId) {
 }
 
 function readinessGuideActive() {
-  return Boolean(accountSession.authenticated && readinessMissionId && readinessMilestone());
+  return Boolean(accountSession.authenticated && readinessMissionId && activeConversationId &&
+    readinessConversationId === activeConversationId && readinessMilestone());
+}
+
+function readinessCompletionVisible() {
+  return Boolean(readinessCompletion && activeConversationId && readinessCompletionConversationId === activeConversationId);
+}
+
+function activateReadinessForChat(conversationId) {
+  const previousConversationId = readinessConversationId;
+  const linked = [...readinessMissionChats].filter(([missionId, entry]) => entry.conversationId === conversationId &&
+    (!readinessSnapshot || (readinessMilestone(missionId) && !readinessMilestone(missionId).validated)))
+    .sort((a, b) => b[1].updatedAt - a[1].updatedAt)[0];
+  if (linked) {
+    const [missionId, entry] = linked;
+    readinessMissionId = entry.paused ? null : missionId;
+    readinessResumeMissionId = missionId;
+    readinessConversationId = conversationId;
+    readinessPaused = entry.paused;
+    readinessEditIndex = readinessEditDrafts.get(missionId) ?? null;
+  } else {
+    readinessMissionId = null;
+    readinessEditIndex = null;
+  }
+  if (previousConversationId !== conversationId) {
+    readinessStatus = "";
+    readinessStatusError = false;
+  }
+  rememberReadinessGuide();
+}
+
+function detachReadinessConversation(id) {
+  if (!id) return;
+  let changed = false;
+  for (const [missionId, entry] of readinessMissionChats) {
+    if (entry.conversationId !== id) continue;
+    readinessMissionChats.delete(missionId);
+    changed = true;
+  }
+  if (readinessConversationId === id) {
+    readinessMissionId = null;
+    readinessConversationId = null;
+    readinessPaused = true;
+    readinessEditIndex = null;
+    if (!readinessMissionChats.has(readinessResumeMissionId)) {
+      readinessResumeMissionId = [...readinessMissionChats.keys()].at(-1) || null;
+    }
+    changed = true;
+  }
+  if (readinessCompletionConversationId === id) {
+    readinessCompletion = null;
+    readinessCompletionConversationId = null;
+    changed = true;
+  }
+  if (changed) rememberReadinessGuide();
 }
 
 function rememberReadinessGuide() {
   if (!accountSession.authenticated) return;
   try {
-    if (readinessMissionId) localStorage.setItem(currentStorageKey(READINESS_GUIDE_KEY), readinessMissionId);
+    if (readinessMissionId) {
+      readinessResumeMissionId = readinessMissionId;
+      localStorage.setItem(currentStorageKey(READINESS_GUIDE_KEY), readinessMissionId);
+    }
     else localStorage.removeItem(currentStorageKey(READINESS_GUIDE_KEY));
+    if (readinessResumeMissionId) localStorage.setItem(currentStorageKey(READINESS_LAST_KEY), readinessResumeMissionId);
+    else localStorage.removeItem(currentStorageKey(READINESS_LAST_KEY));
+    if (readinessConversationId) localStorage.setItem(currentStorageKey(READINESS_CHAT_KEY), readinessConversationId);
+    else localStorage.removeItem(currentStorageKey(READINESS_CHAT_KEY));
     if (readinessPaused) localStorage.setItem(currentStorageKey(READINESS_PAUSED_KEY), "1");
     else localStorage.removeItem(currentStorageKey(READINESS_PAUSED_KEY));
+    localStorage.setItem(currentStorageKey(READINESS_CHATS_KEY), JSON.stringify([...readinessMissionChats]));
   } catch { /* The server still preserves answers. */ }
 }
 
@@ -1403,6 +1473,9 @@ function persistReadinessTurns() {
 function restoreReadinessGuide() {
   readinessSnapshot = null;
   readinessMissionId = null;
+  readinessResumeMissionId = null;
+  readinessConversationId = null;
+  readinessMissionChats = new Map();
   readinessPaused = false;
   readinessEditIndex = null;
   readinessBusy = false;
@@ -1410,6 +1483,7 @@ function restoreReadinessGuide() {
   readinessStatus = "";
   readinessStatusError = false;
   readinessCompletion = null;
+  readinessCompletionConversationId = null;
   readinessRequestId = null;
   readinessHeldComposer = "";
   readinessHeldConversationId = null;
@@ -1425,7 +1499,32 @@ function restoreReadinessGuide() {
   if (!accountSession.authenticated) return;
   try {
     readinessMissionId = localStorage.getItem(currentStorageKey(READINESS_GUIDE_KEY)) || null;
+    readinessResumeMissionId = readinessMissionId || localStorage.getItem(currentStorageKey(READINESS_LAST_KEY)) || null;
+    readinessConversationId = localStorage.getItem(currentStorageKey(READINESS_CHAT_KEY)) || null;
     readinessPaused = localStorage.getItem(currentStorageKey(READINESS_PAUSED_KEY)) === "1";
+    const savedLinksRaw = localStorage.getItem(currentStorageKey(READINESS_CHATS_KEY));
+    const savedLinks = JSON.parse(savedLinksRaw || "[]");
+    if (Array.isArray(savedLinks)) for (const pair of savedLinks) {
+      const [missionId, entry] = Array.isArray(pair) ? pair : [];
+      if (typeof missionId !== "string" || !/^[a-z_]+$/.test(missionId) ||
+          typeof entry?.conversationId !== "string" || !entry.conversationId) continue;
+      readinessMissionChats.set(missionId, {
+        conversationId: entry.conversationId,
+        paused: entry.paused === true,
+        updatedAt: Number.isFinite(entry.updatedAt) ? entry.updatedAt : 0
+      });
+    }
+    const legacyId = readinessMissionId || readinessResumeMissionId;
+    if (savedLinksRaw === null && legacyId && readinessConversationId && !readinessMissionChats.has(legacyId)) {
+      readinessMissionChats.set(legacyId, { conversationId: readinessConversationId,
+        paused: readinessPaused || !readinessMissionId, updatedAt: 0 });
+    }
+    if (readinessMissionId && !readinessConversationId) {
+      // Older guide state was shared by every chat. Resume it explicitly from Project.
+      readinessMissionId = null;
+      readinessPaused = true;
+    }
+    activateReadinessForChat(activeConversationId);
   } catch { /* A saved draft will resume from the maturity snapshot. */ }
 }
 
@@ -1463,21 +1562,37 @@ function syncReadinessSnapshot(data) {
     renderReadinessMission();
     return;
   }
-  if (readinessCompletion) { renderReadinessMission(); return; }
+  if (readinessCompletionVisible()) { renderReadinessMission(); return; }
+  let linksChanged = false;
+  for (const [missionId] of readinessMissionChats) {
+    const linkedMission = readinessMilestone(missionId);
+    if (linkedMission && !linkedMission.validated) continue;
+    readinessMissionChats.delete(missionId);
+    linksChanged = true;
+  }
   if (readinessMissionId) {
     const milestone = readinessMilestone();
     if (!milestone || milestone.validated) {
+      if (readinessResumeMissionId === readinessMissionId) readinessResumeMissionId = null;
       readinessMissionId = null;
       readinessEditIndex = null;
-      rememberReadinessGuide();
+      linksChanged = true;
     }
   }
-  if (!readinessMissionId && !readinessPaused) {
+  if (readinessResumeMissionId && (!readinessMilestone(readinessResumeMissionId) || readinessMilestone(readinessResumeMissionId).validated)) {
+    readinessResumeMissionId = null;
+    readinessPaused = false;
+    linksChanged = true;
+  }
+  if (!readinessMissionId && !readinessResumeMissionId) {
+    const linked = [...readinessMissionChats].sort((a, b) => b[1].updatedAt - a[1].updatedAt)[0];
     const pending = data?.maturity?.milestones?.find((item) => !item.validated &&
       (Number(item.draft?.answeredCount) > 0 || item.draft?.answers?.some((answer) => answer?.trim())));
-    if (pending) { readinessMissionId = pending.id; rememberReadinessGuide(); }
+    readinessResumeMissionId = linked?.[0] || pending?.id || null;
+    linksChanged = Boolean(readinessResumeMissionId) || linksChanged;
   }
-  if (readinessMissionId) prefillUnreviewedReadinessAnswer(readinessMilestone());
+  if (linksChanged) rememberReadinessGuide();
+  if (readinessGuideActive()) prefillUnreviewedReadinessAnswer(readinessMilestone());
   renderReadinessMission();
 }
 
@@ -1524,7 +1639,7 @@ function renderReadinessMission() {
   const card = $("readiness-chat-mission");
   if (!card) return;
   const milestone = readinessGuideActive() ? readinessMilestone() : null;
-  const finished = readinessCompletion;
+  const finished = readinessCompletionVisible() ? readinessCompletion : null;
   card.hidden = !milestone && !finished;
   if (card.hidden) return;
   const questions = Array.isArray(milestone?.questions) ? milestone.questions : [];
@@ -1607,6 +1722,7 @@ function renderReadinessMission() {
   tool.disabled = readinessBusy || (isMetric && !milestone.plannedCriterion);
   $("readiness-chat-actions").hidden = !milestone;
   $("readiness-chat-pause").disabled = readinessBusy;
+  $("readiness-chat-reset").disabled = readinessBusy;
   $("readiness-chat-status").textContent = readinessStatus;
   $("readiness-chat-status").classList.toggle("is-error", readinessStatusError);
 }
@@ -1674,9 +1790,48 @@ async function loadReadinessExperiments() {
   }
 }
 
+async function ensureReadinessConversation(milestone) {
+  if (activeConversationId) return true;
+  if (guestMigrationNeedsSave) {
+    setChatStatus("Save your copied guest chat before starting a project mission.", true);
+    return false;
+  }
+  const userId = accountSession.user?.id;
+  const generation = workspaceGeneration;
+  accountBusy = true;
+  renderAccount();
+  try {
+    if (chatMessages.length || pinnedMission || sourceEntries.length || onboarding.active) await writeConversation(false);
+    if (userId !== accountSession.user?.id || generation !== workspaceGeneration) return false;
+    if (!activeConversationId) {
+      const data = await accountApi("POST", "/api/conversations", {
+        title: milestone.title, messages: [], pinnedMission: null,
+        sourceContexts: [], onboardingDraft: null
+      });
+      if (userId !== accountSession.user?.id || generation !== workspaceGeneration) return false;
+      const created = data.conversation;
+      if (!created?.id) throw new Error("The mission chat could not be created.");
+      activeConversationId = created.id;
+      persistActiveConversationId();
+      $("account-chat-title").value = created.title;
+      lastSavedSnapshot = JSON.stringify(conversationPayload());
+      accountConversations = [{ id: created.id, title: created.title, createdAt: created.createdAt,
+        updatedAt: created.updatedAt, messageCount: 0 }, ...accountConversations.filter((item) => item.id !== created.id)].slice(0, 12);
+      void refreshConversations();
+    }
+    return true;
+  } catch (error) {
+    setChatStatus(`Could not prepare the mission chat: ${error.message}`, true);
+    return false;
+  } finally {
+    accountBusy = false;
+    renderAccount();
+  }
+}
+
 async function startReadinessMission(missionId) {
   if (!accountSession.authenticated) { $("open-account")?.click(); return; }
-  if (readinessBusy) return;
+  if (!accountReady || accountBusy || chatBusy || sourceBusy || readinessBusy) return;
   const userId = accountSession.user?.id;
   const generation = workspaceGeneration;
   if (!readinessSnapshot) {
@@ -1692,12 +1847,23 @@ async function startReadinessMission(missionId) {
     setChatStatus("This mission is already complete. Return to Project to open your next mission.");
     return;
   }
-  const previousMissionId = readinessMissionId;
+  const missionConversationId = readinessMissionChats.get(id)?.conversationId || null;
+  if (missionConversationId && missionConversationId !== activeConversationId) {
+    await openSavedConversation(missionConversationId);
+    if (userId !== accountSession.user?.id || generation !== workspaceGeneration) return;
+    if (activeConversationId !== missionConversationId) {
+      setChatStatus("Could not reopen the mission chat. Open it from Chats and try again.", true);
+      return;
+    }
+  }
+  if (!(await ensureReadinessConversation(milestone))) return;
+  if (userId !== accountSession.user?.id || generation !== workspaceGeneration) return;
+  const previousMissionId = readinessGuideActive() ? readinessMissionId : null;
   if (previousMissionId && previousMissionId !== id) {
     readinessComposerDrafts.set(previousMissionId, $("chat-input").value);
     readinessEditDrafts.set(previousMissionId, readinessEditIndex);
     $("chat-input").value = readinessComposerDrafts.get(id) || "";
-  } else if (!readinessMissionId) {
+  } else if (!previousMissionId) {
     if ($("chat-input").value.trim()) {
       readinessHeldComposer = $("chat-input").value;
       readinessHeldConversationId = activeConversationId;
@@ -1705,8 +1871,12 @@ async function startReadinessMission(missionId) {
     $("chat-input").value = readinessComposerDrafts.get(id) || "";
   }
   readinessMissionId = id;
+  readinessResumeMissionId = id;
+  readinessConversationId = activeConversationId;
+  readinessMissionChats.set(id, { conversationId: activeConversationId, paused: false, updatedAt: Date.now() });
   readinessPaused = false;
   readinessCompletion = null;
+  readinessCompletionConversationId = null;
   if (previousMissionId !== id) readinessEditIndex = readinessEditDrafts.get(id) ?? null;
   readinessRequestId = null;
   $("readiness-chat-confirm").checked = false;
@@ -1735,6 +1905,9 @@ function pauseReadinessMission() {
   if (!readinessGuideActive() || readinessBusy) return;
   readinessComposerDrafts.set(readinessMissionId, $("chat-input").value);
   readinessEditDrafts.set(readinessMissionId, readinessEditIndex);
+  const missionId = readinessMissionId;
+  const linked = readinessMissionChats.get(missionId);
+  if (linked) readinessMissionChats.set(missionId, { ...linked, paused: true, updatedAt: Date.now() });
   $("chat-input").value = "";
   readinessMissionId = null;
   readinessPaused = true;
@@ -1749,6 +1922,46 @@ function pauseReadinessMission() {
   renderChat();
   setChatStatus("Mission paused. Chat freely with Lia; return to Project to continue your saved mission.");
   $("chat-input").focus();
+}
+
+async function resetReadinessMission() {
+  const milestone = readinessGuideActive() ? readinessMilestone() : null;
+  if (!milestone || milestone.validated || readinessBusy || accountBusy) return;
+  const warning = `Restart "${milestone.title}"? This removes its draft answers and Lia review history from this project. Completed missions and other chats stay saved.${milestone.plannedCriterion ? " The predeclared success threshold stays fixed." : ""}`;
+  if (!window.confirm(warning)) return;
+  const userId = accountSession.user?.id;
+  const generation = workspaceGeneration;
+  const missionId = milestone.id;
+  readinessBusy = true;
+  setReadinessStatus("Restarting this mission…");
+  renderChat();
+  try {
+    const data = await accountApi("POST", `/api/projects/current/milestones/${encodeURIComponent(missionId)}/reset`, {});
+    if (userId !== accountSession.user?.id || generation !== workspaceGeneration || !readinessGuideActive() || readinessMissionId !== missionId) return;
+    readinessTurns = readinessTurns.filter((turn) => turn.missionId !== missionId);
+    persistReadinessTurns();
+    readinessComposerDrafts.delete(missionId);
+    readinessEditDrafts.delete(missionId);
+    readinessEditIndex = null;
+    readinessRequestId = null;
+    readinessExperimentId = "";
+    $("chat-input").value = "";
+    $("readiness-chat-confirm").checked = false;
+    $("readiness-chat-observed-value").value = "";
+    applyReadinessSnapshot(data);
+    setReadinessStatus("Mission restarted. Lia is ready for your first answer.");
+    renderChat(true);
+    $("chat-input").focus();
+  } catch (error) {
+    if (userId === accountSession.user?.id && generation === workspaceGeneration) {
+      setReadinessStatus(error.message || "The mission could not be restarted. Your answers are still saved.", true);
+    }
+  } finally {
+    if (userId === accountSession.user?.id && generation === workspaceGeneration) {
+      readinessBusy = false;
+      renderChat();
+    }
+  }
 }
 
 async function submitReadinessAnswer() {
@@ -1779,6 +1992,8 @@ async function submitReadinessAnswer() {
   const userId = accountSession.user?.id;
   const generation = workspaceGeneration;
   const missionId = milestone.id;
+  $("project-memory-panel").open = false;
+  closeChatSuggestions();
   readinessBusy = true;
   readinessAnalyzing = true;
   setReadinessStatus("Lia is analyzing your message…");
@@ -1889,7 +2104,10 @@ async function completeReadinessMission() {
     readinessCompletion = { title: milestone.title, total: milestone.questions?.length || 0,
       before, after: Number(data?.maturity?.percent) || before, gain: milestone.weight,
       nextMission: data?.nextMission || null };
+    readinessCompletionConversationId = activeConversationId;
+    readinessMissionChats.delete(missionId);
     readinessMissionId = null;
+    readinessResumeMissionId = [...readinessMissionChats.keys()].at(-1) || null;
     readinessPaused = false;
     readinessEditIndex = null;
     readinessComposerDrafts.delete(missionId);
@@ -2266,7 +2484,8 @@ function focusMissionInChat() {
   if (!$("mission-drawer").hidden) closeMissionTracker();
   expandedMissionId = activeMissionRecord()?.id || null;
   renderMissionTracker();
-  const card = activeMissionRecord() ? $("mission-conversation") : !$("mission-reward-card").hidden ? $("mission-reward-card") : $("mission-chat-empty");
+  if (!activeMissionRecord() && $("mission-reward-card").hidden) { prepareNextMission(); return; }
+  const card = activeMissionRecord() ? $("mission-conversation") : $("mission-reward-card");
   if (card.hidden) { prepareNextMission(); return; }
   card.scrollIntoView({ block: "nearest", behavior: "smooth" });
   card.focus({ preventScroll: true });
@@ -2795,6 +3014,41 @@ function activatePinCandidate(event) {
   focusMissionInChat();
 }
 
+function closeChatSuggestions(restoreFocus = false) {
+  $("chat-suggestions-panel").hidden = true;
+  $("chat-suggestions-trigger").setAttribute("aria-expanded", "false");
+  if (restoreFocus && !$("chat-suggestions").hidden) $("chat-suggestions-trigger").focus();
+}
+
+function renderChatSuggestions(latestAssistant) {
+  const hasChat = chatMessages.length > 0;
+  $("start-demo").hidden = hasChat;
+  $("chat-suggestions").hidden = !hasChat || readinessGuideActive();
+  if ($("chat-suggestions").hidden) closeChatSuggestions();
+  const actions = $("chat-suggestions-actions");
+  actions.replaceChildren();
+  actions.hidden = !latestAssistant;
+  if (latestAssistant) {
+    actions.append(el("span", "chat-suggestions-section-title", "From Lia's last reply"));
+    for (const [action, label] of [["challenge", "Challenge this"], ["mission", "Make a mission"], ["pin", "Start a mission"]]) {
+      const button = el("button", "response-action", label);
+      button.type = "button";
+      button.dataset.responseAction = action;
+      button.dataset.sourceMessageId = latestAssistant.id;
+      button.disabled = chatBusy || sourceBusy || readinessGuideActive() || (isDemoQuotaExhausted() && action !== "pin") ||
+        (action === "pin" && pinnedMission?.sourceMessageId === latestAssistant.id);
+      if (action === "pin" && pinnedMission?.sourceMessageId === latestAssistant.id) button.textContent = "Mission in progress";
+      if (action === "pin" && missionTracker.records.some((record) => record.id === latestAssistant.id && record.status === "completed")) {
+        button.textContent = "Mission completed";
+        button.disabled = true;
+      }
+      actions.append(button);
+    }
+  }
+  $("mission-chat-ask").disabled = chatBusy || sourceBusy || readinessGuideActive();
+  $("chat-suggestion-demo").disabled = chatBusy || sourceBusy || readinessGuideActive();
+}
+
 function renderChat(scroll = false) {
   const list = $("chat-messages");
   const latestAssistant = [...chatMessages].reverse().find((item) => item.role === "assistant");
@@ -2827,24 +3081,7 @@ function renderChat(scroll = false) {
       retry.disabled = chatBusy || sourceBusy || isDemoQuotaExhausted();
       body.append(el("p", "message-error", "Lia did not answer this message."), retry);
     }
-    if (message.role === "assistant" && message.id === latestAssistant?.id) {
-      const actions = el("div", "response-actions");
-      for (const [action, label] of [["challenge", "Challenge this"], ["mission", "Make a mission"], ["pin", "Start a mission"]]) {
-        const button = el("button", "response-action", label);
-        button.type = "button";
-        button.dataset.responseAction = action;
-        button.dataset.sourceMessageId = message.id;
-        button.disabled = chatBusy || sourceBusy || (isDemoQuotaExhausted() && action !== "pin") || (action === "pin" && pinnedMission?.sourceMessageId === message.id);
-        if (action === "pin" && pinnedMission?.sourceMessageId === message.id) button.textContent = "Mission in progress";
-        if (action === "pin" && missionTracker.records.some((record) => record.id === message.id && record.status === "completed")) {
-          button.textContent = "Mission completed";
-          button.disabled = true;
-        }
-        actions.append(button);
-      }
-      body.append(actions);
-      renderPinCandidate(body, message);
-    }
+    if (message.role === "assistant" && message.id === latestAssistant?.id) renderPinCandidate(body, message);
     const current = activeMissionRecord();
     if (current?.status === "approved" && message.role === "user" && message.at >= Math.max(current.approvedAt || current.createdAt, pinnedMission.pinnedAt)) {
       const saveResult = el("button", "message-result-action", "Use as mission result");
@@ -2857,18 +3094,22 @@ function renderChat(scroll = false) {
     return row;
   }));
   renderReadinessConversation(list);
-  $("chat-empty").hidden = chatMessages.length > 0 || onboarding.active || readinessGuideActive() || !!readinessCompletion;
+  $("chat-empty").hidden = chatMessages.length > 0 || onboarding.active || readinessGuideActive() || readinessCompletionVisible();
   $("create-account-welcome").hidden = accountSession.authenticated;
   $("guest-draft-choice").hidden = accountSession.authenticated || !guestHidden || !loadChatMessages(CHAT_STORAGE_KEY).length;
   renderOnboarding();
   $("chat-typing").hidden = !chatBusy && !readinessAnalyzing;
+  renderChatSuggestions(latestAssistant);
   $("chat-shortcuts").hidden = !!activeMissionRecord() || !chatMessages.some((message) => message.role === "assistant");
   const sampleDemo = chatMessages.some((message) => message.role === "user" && message.content.startsWith("Atelier Loop is a fictional circular-delivery startup.")) || sourceEntries.some((entry) => entry.selected && entry.sources.some((source) => source.sample));
   for (const button of $("chat-shortcuts").querySelectorAll("[data-demo-only]")) button.hidden = !sampleDemo;
   $("export-chat").disabled = chatMessages.length === 0;
   $("export-chat-help").textContent = chatMessages.length ? "Download this chat as Markdown" : "Available after your first message";
   $("use-chat-context").disabled = !chatMessages.some((message) => message.role === "user" && message.status === "complete");
-  $("reset-chat").disabled = chatBusy || sourceBusy || readinessBusy || !accountReady;
+  const chatNavigationBusy = chatBusy || sourceBusy || readinessBusy || accountBusy || !accountReady;
+  $("reset-chat").disabled = chatNavigationBusy;
+  $("chat-thread-trigger").disabled = chatNavigationBusy;
+  if (chatNavigationBusy) closeChatThreadPanel();
   $("open-decision-canvas").disabled = sourceBusy;
   const input = $("chat-input");
   const guided = readinessGuideActive();
@@ -2972,6 +3213,8 @@ function submitChatMessage(rawContent, clearComposer = false) {
     return false;
   }
   const message = { id: crypto.randomUUID(), role: "user", content, at: Date.now(), status: "pending" };
+  $("project-memory-panel").open = false;
+  closeChatSuggestions();
   chatMessages.push(message);
   if (clearComposer) $("chat-input").value = "";
   requestChatReply(message);
@@ -3072,18 +3315,40 @@ function exportChat() {
 
 async function resetChat() {
   if (!accountReady || chatBusy || sourceBusy || readinessBusy || accountBusy) return;
+  closeChatThreadPanel();
   if (!accountSession.authenticated && guestHidden && loadChatMessages(CHAT_STORAGE_KEY).length) {
     setChatStatus("Choose Restore draft or Start fresh above before starting another chat.", true);
     $("guest-start-fresh").focus();
     return;
   }
-  const hadWork = !!(chatMessages.length || pinnedMission || sourceEntries.length);
+  const hadWork = !!(chatMessages.length || pinnedMission || sourceEntries.length || onboarding.active);
   if (hadWork && (!accountSession.authenticated || guestMigrationNeedsSave) && !window.confirm(guestMigrationNeedsSave
     ? "This copied guest chat has not been saved to your account. Discard it and start a new chat?"
     : "Discard this local guest chat and start a new one?")) return;
-  if (accountSession.authenticated && !guestMigrationNeedsSave) {
-    try { await writeConversation(false); }
-    catch (error) { setChatStatus(`Could not save the current chat: ${error.message}`, true); return; }
+  let created = null;
+  if (accountSession.authenticated) {
+    accountBusy = true;
+    renderAccount();
+    setChatStatus("Creating a new chat…");
+    try {
+      if (!guestMigrationNeedsSave) await writeConversation(false);
+      const data = await accountApi("POST", "/api/conversations", {
+        title: "New Bueeld conversation", messages: [], pinnedMission: null,
+        sourceContexts: [], onboardingDraft: null
+      });
+      created = data.conversation;
+      if (!created?.id) throw new Error("The new chat could not be created.");
+    } catch (error) {
+      setChatStatus(`Could not create a new chat: ${error.message}`, true);
+      accountBusy = false;
+      renderAccount();
+      return;
+    }
+    accountBusy = false;
+  }
+  if (readinessGuideActive()) {
+    readinessComposerDrafts.set(readinessMissionId, $("chat-input").value);
+    readinessEditDrafts.set(readinessMissionId, readinessEditIndex);
   }
   chatMessages = [];
   pinnedMission = null;
@@ -3097,19 +3362,24 @@ async function resetChat() {
   readinessHeldConversationId = null;
   $("chat-file-input").value = "";
   $("chat-input").value = "";
-  activeConversationId = null;
-  lastSavedSnapshot = null;
+  activeConversationId = created?.id || null;
+  activateReadinessForChat(activeConversationId);
   guestMigrationNeedsSave = false;
   persistActiveConversationId();
   renderSourceResults();
-  setChatStatus("");
+  setChatStatus(created ? "New chat ready." : "");
   persistChat();
   persistPinnedMission();
-  $("account-chat-title").value = "";
+  $("account-chat-title").value = created?.title || "";
+  lastSavedSnapshot = created ? JSON.stringify(conversationPayload()) : null;
+  if (created) {
+    accountConversations = [{ id: created.id, title: created.title, createdAt: created.createdAt,
+      updatedAt: created.updatedAt, messageCount: 0 }, ...accountConversations.filter((item) => item.id !== created.id)].slice(0, 12);
+  }
   renderChat();
   renderMissionTracker();
   renderAccount();
-  if (accountSession.authenticated && hadWork) setChatStatus("Previous chat saved. New conversation ready.");
+  if (created) refreshConversations();
   $("chat-input").focus();
 }
 
@@ -3178,7 +3448,7 @@ function conversationPayload() {
 
 function updateSaveIndicator() {
   const visible = accountReady && accountSession.authenticated;
-  $("account-save-row").hidden = !visible;
+  $("account-save-row").hidden = !visible || (!accountSaveFailed && !guestMigrationNeedsSave);
   if (!visible) return;
   const pending = !!(conversationAutosaveTimer || conversationSavePromise || missionSyncTimer || missionSyncPromise || missionDirty);
   const label = guestMigrationNeedsSave ? "Copied guest chat is still local" : accountSaveFailed ? "Lab save failed" : pending ? "Saving to Lab…" : "Saved to Lab";
@@ -3306,6 +3576,49 @@ function conversationTitle() {
   return text.length > 72 ? text.slice(0, 69).trimEnd() + "…" : text;
 }
 
+function closeChatThreadPanel(restoreFocus = false) {
+  const panel = $("chat-thread-panel");
+  if (panel.hidden) return;
+  panel.hidden = true;
+  $("chat-thread-trigger").setAttribute("aria-expanded", "false");
+  if (restoreFocus && !$("chat-thread-trigger").disabled) $("chat-thread-trigger").focus();
+}
+
+function renderChatThreads() {
+  const signedIn = accountSession.authenticated;
+  const active = accountConversations.find((item) => item.id === activeConversationId);
+  const displayTitle = (title) => title === "New Bueeld conversation" ? "New chat" : title;
+  const currentTitle = signedIn ? displayTitle(active?.title || conversationTitle()) : "Chats";
+  const blocked = !accountReady || accountBusy || chatBusy || sourceBusy || readinessBusy;
+  $("chat-thread-title").textContent = currentTitle;
+  $("chat-thread-trigger").setAttribute("aria-label", signedIn ? `Choose a chat. Current: ${currentTitle}` : "Sign in to access saved chats");
+  $("chat-thread-trigger").disabled = blocked;
+  $("reset-chat").disabled = blocked;
+  if (blocked) closeChatThreadPanel();
+  $("chat-thread-count").hidden = !signedIn || !accountConversations.length;
+  $("chat-thread-count").textContent = String(accountConversations.length);
+  $("chat-thread-total").textContent = signedIn ? `${accountConversations.length} / 12 saved` : "";
+  $("chat-thread-guest").hidden = signedIn;
+  const rows = signedIn ? accountConversations.map((conversation) => {
+    const isCurrent = conversation.id === activeConversationId;
+    const button = el("button", `chat-thread-item${isCurrent ? " is-current" : ""}`);
+    button.type = "button";
+    button.dataset.chatSwitch = conversation.id;
+    button.title = conversation.title;
+    button.disabled = blocked;
+    if (isCurrent) button.setAttribute("aria-current", "true");
+    const linkedMissions = [...readinessMissionChats].filter(([, entry]) => entry.conversationId === conversation.id);
+    const detail = linkedMissions.length > 1 ? `${linkedMissions.length} missions in progress`
+      : linkedMissions.length === 1 ? linkedMissions[0][1].paused ? "Mission paused" : "Mission in progress"
+        : `${conversation.messageCount} ${conversation.messageCount === 1 ? "message" : "messages"}`;
+    button.append(el("strong", "", displayTitle(conversation.title)),
+      el("small", "", `${isCurrent ? "Current · " : ""}${detail}`));
+    return button;
+  }) : [];
+  if (signedIn && !rows.length) rows.push(el("p", "chat-thread-empty", "No saved chats yet. Create one with New chat."));
+  $("chat-thread-list").replaceChildren(...rows);
+}
+
 function renderAccount() {
   $("open-account").textContent = accountSession.authenticated ? "Account" : "Sign in";
   $("open-account").setAttribute("aria-label", accountSession.authenticated ? "Account and saved conversations" : "Sign in or create account");
@@ -3353,6 +3666,7 @@ function renderAccount() {
     return row;
   });
   $("account-conversations").replaceChildren(...(rows.length ? rows : [el("p", "account-small", "No saved conversations yet.")]));
+  renderChatThreads();
   updateSaveIndicator();
 }
 
@@ -3404,6 +3718,8 @@ function loadAccountWorkspace() {
   accountSaveFailed = false;
   onboarding.active = false;
   clearAccountBoundMemory();
+  try { activeConversationId = accountSession.authenticated ? localStorage.getItem(currentStorageKey(ACTIVE_CONVERSATION_KEY)) : null; }
+  catch { activeConversationId = null; }
   restoreReadinessGuide();
   state = !accountSession.authenticated && guestHidden ? emptyState() : loadState();
   $("brief-input").value = state.brief;
@@ -3420,8 +3736,6 @@ function loadAccountWorkspace() {
   expandedMissionId = null;
   recentMissionCompletionId = null;
   missionDirty = false;
-  try { activeConversationId = accountSession.authenticated ? localStorage.getItem(currentStorageKey(ACTIVE_CONVERSATION_KEY)) : null; }
-  catch { activeConversationId = null; }
   $("account-chat-title").value = conversationTitle();
   reconcilePinnedMission();
   renderMissionTracker();
@@ -3464,7 +3778,7 @@ async function loadServerMissionTracker() {
 function clearAuthenticatedLocalDrafts(userId) {
   if (!userId) return;
   const suffix = `-user-${String(userId).replace(/[^A-Za-z0-9_-]/g, "")}`;
-  for (const base of [STORAGE_KEY, CHAT_STORAGE_KEY, MISSION_STORAGE_KEY, MISSION_TRACKER_STORAGE_KEY, ACTIVE_CONVERSATION_KEY, READINESS_GUIDE_KEY, READINESS_PAUSED_KEY, READINESS_TURNS_KEY, ...(typeof PROJECT_MEMORY_KEY === "string" ? [PROJECT_MEMORY_KEY] : [])]) {
+  for (const base of [STORAGE_KEY, CHAT_STORAGE_KEY, MISSION_STORAGE_KEY, MISSION_TRACKER_STORAGE_KEY, ACTIVE_CONVERSATION_KEY, READINESS_GUIDE_KEY, READINESS_PAUSED_KEY, READINESS_LAST_KEY, READINESS_CHAT_KEY, READINESS_CHATS_KEY, READINESS_TURNS_KEY, ...(typeof PROJECT_MEMORY_KEY === "string" ? [PROJECT_MEMORY_KEY] : [])]) {
     try { localStorage.removeItem(base + suffix); } catch { /* Browser storage may be unavailable. */ }
   }
 }
@@ -3479,6 +3793,7 @@ async function refreshConversations() {
     accountConversations = Array.isArray(data.conversations) ? data.conversations : [];
     if (activeConversationId && !accountConversations.some((item) => item.id === activeConversationId)) {
       if (conversationSavePromise) return;
+      detachReadinessConversation(activeConversationId);
       activeConversationId = null;
       persistActiveConversationId();
     }
@@ -3497,6 +3812,7 @@ async function refreshConversations() {
 function selectRecentConversationIfNeeded() {
   if (!accountSession.authenticated || activeConversationId || chatMessages.length || !accountConversations.length) return;
   activeConversationId = accountConversations[0].id;
+  activateReadinessForChat(activeConversationId);
   persistActiveConversationId();
 }
 
@@ -3581,6 +3897,7 @@ async function initializeAccount() {
 
 function openAccount() {
   if (chatBusy || sourceBusy || readinessBusy) { setChatStatus("Wait for Lia to finish before changing accounts."); return; }
+  closeChatThreadPanel();
   if (!$("mission-drawer").hidden) closeMissionTracker();
   if (!$("source-drawer").hidden) closeSources();
   if (!$("decision-drawer").hidden) closeDecisionCanvas();
@@ -3734,6 +4051,7 @@ async function saveCurrentConversation() {
 
 async function openSavedConversation(id) {
   if (!accountSession.authenticated || accountBusy || chatBusy || sourceBusy || readinessBusy) return;
+  closeChatThreadPanel();
   if (guestMigrationNeedsSave && chatMessages.length && !window.confirm("Your copied guest chat is still local. Opening another conversation will replace this copy; the original guest draft remains on this browser. Continue?")) return;
   accountBusy = true;
   accountMessage("Loading conversation…");
@@ -3743,6 +4061,10 @@ async function openSavedConversation(id) {
     const data = await accountApi("GET", `/api/conversations/${encodeURIComponent(id)}`);
     const conversation = data.conversation;
     if (!conversation || !Array.isArray(conversation.messages)) throw new Error("Saved conversation is incomplete.");
+    if (readinessGuideActive()) {
+      readinessComposerDrafts.set(readinessMissionId, $("chat-input").value);
+      readinessEditDrafts.set(readinessMissionId, readinessEditIndex);
+    }
     autosaveMuted = true;
     chatMessages = conversation.messages;
     pinnedMission = conversation.pinnedMission || null;
@@ -3762,7 +4084,12 @@ async function openSavedConversation(id) {
     $("chat-file-input").value = "";
     $("chat-input").value = "";
     activeConversationId = conversation.id;
+    activateReadinessForChat(activeConversationId);
     persistActiveConversationId();
+    if (readinessGuideActive()) {
+      $("chat-input").value = readinessComposerDrafts.get(readinessMissionId) || "";
+      prefillUnreviewedReadinessAnswer(readinessMilestone());
+    }
     persistChat();
     persistPinnedMission();
     $("account-chat-title").value = conversation.title;
@@ -3797,6 +4124,7 @@ async function deleteSavedConversation(id) {
     conversationAutosaveTimer = null;
     if (conversationSavePromise) await conversationSavePromise;
     await accountApi("DELETE", `/api/conversations/${encodeURIComponent(id)}`);
+    detachReadinessConversation(id);
     if (isCurrent) {
       autosaveMuted = true;
       chatMessages = [];
@@ -3916,6 +4244,36 @@ $("account-restore-guest").addEventListener("click", restoreGuestDraft);
 $("guest-restore-draft").addEventListener("click", restoreGuestDraft);
 $("guest-start-fresh").addEventListener("click", startFreshGuestDraft);
 $("account-refresh").addEventListener("click", refreshConversations);
+$("chat-thread-trigger").addEventListener("click", () => {
+  const panel = $("chat-thread-panel");
+  if (panel.hidden) {
+    renderChatThreads();
+    panel.hidden = false;
+    $("chat-thread-trigger").setAttribute("aria-expanded", "true");
+    if (accountSession.authenticated) refreshConversations();
+  } else closeChatThreadPanel();
+});
+$("chat-thread-list").addEventListener("click", (event) => {
+  const button = event.target.closest("[data-chat-switch]");
+  if (!button || button.disabled) return;
+  const id = button.dataset.chatSwitch;
+  closeChatThreadPanel();
+  if (id === activeConversationId) $("chat-input").focus();
+  else openSavedConversation(id);
+});
+$("chat-thread-signin").addEventListener("click", () => {
+  closeChatThreadPanel();
+  openAccount();
+});
+document.addEventListener("click", (event) => {
+  if (!$("chat-thread-panel").hidden && !$("chat-thread-switcher").contains(event.target)) closeChatThreadPanel();
+});
+document.addEventListener("keydown", (event) => {
+  if (event.key === "Escape" && !$("chat-thread-panel").hidden) {
+    event.preventDefault();
+    closeChatThreadPanel(true);
+  }
+});
 $("account-conversations").addEventListener("click", (event) => {
   const open = event.target.closest("[data-conversation-open]");
   const remove = event.target.closest("[data-conversation-delete]");
@@ -4002,6 +4360,7 @@ $("readiness-chat-answers").addEventListener("click", (event) => {
   $("chat-input").focus();
 });
 $("readiness-chat-pause").addEventListener("click", pauseReadinessMission);
+$("readiness-chat-reset").addEventListener("click", () => { void resetReadinessMission(); });
 $("readiness-chat-criterion").addEventListener("submit", setReadinessCriterion);
 $("readiness-chat-confirm").addEventListener("change", renderReadinessMission);
 $("readiness-chat-complete").addEventListener("click", () => { void completeReadinessMission(); });
@@ -4027,7 +4386,11 @@ $("readiness-saved-facts-list").addEventListener("click", (event) => {
   const button = event.target.closest("button[data-readiness-continue]");
   if (button) void startReadinessMission(button.dataset.readinessContinue);
 });
-$("chat-input").addEventListener("focus", collapseMissionInChat);
+$("chat-input").addEventListener("focus", () => {
+  collapseMissionInChat();
+  $("project-memory-panel").open = false;
+  closeChatSuggestions();
+});
 $("chat-input").addEventListener("input", () => renderChat());
 $("chat-input").addEventListener("keydown", (event) => {
   if (event.key === "Enter" && !event.shiftKey && !event.isComposing) {
@@ -4036,7 +4399,6 @@ $("chat-input").addEventListener("keydown", (event) => {
   }
 });
 $("chat-messages").addEventListener("click", retryChat);
-$("chat-messages").addEventListener("click", handleResponseAction);
 $("chat-messages").addEventListener("click", activatePinCandidate);
 $("chat-messages").addEventListener("input", handlePinCandidate);
 $("chat-messages").addEventListener("click", (event) => {
@@ -4054,6 +4416,44 @@ $("mission-evidence").addEventListener("click", () => openMissionEvidence());
 $("mission-unpin").addEventListener("click", unpinMission);
 $("chat-empty").addEventListener("click", sendSuggestion);
 $("chat-shortcuts").addEventListener("click", sendSuggestion);
+$("chat-suggestions-trigger").addEventListener("click", () => {
+  const panel = $("chat-suggestions-panel");
+  if (panel.hidden) {
+    $("project-memory-panel").open = false;
+    panel.hidden = false;
+    $("chat-suggestions-trigger").setAttribute("aria-expanded", "true");
+  } else closeChatSuggestions();
+});
+$("chat-suggestions-panel").addEventListener("click", (event) => {
+  const button = event.target.closest("button");
+  if (!button || button.disabled) return;
+  if (button.dataset.responseAction) handleResponseAction(event);
+  closeChatSuggestions();
+});
+$("chat-suggestion-demo").addEventListener("click", () => $("start-demo").click());
+$("project-memory-panel").addEventListener("toggle", () => {
+  if ($("project-memory-panel").open) closeChatSuggestions();
+});
+$("project-memory-panel").addEventListener("keydown", (event) => {
+  if (event.key === "Escape" && $("project-memory-panel").open) {
+    event.preventDefault();
+    $("project-memory-panel").open = false;
+    $("project-memory-summary").focus();
+  }
+});
+$("chat-suggestions").addEventListener("keydown", (event) => {
+  if (event.key === "Escape" && !$("chat-suggestions-panel").hidden) {
+    event.preventDefault();
+    closeChatSuggestions(true);
+  }
+});
+$("chat-suggestions").addEventListener("focusout", (event) => {
+  if (!$("chat-suggestions").contains(event.relatedTarget)) closeChatSuggestions();
+});
+document.addEventListener("pointerdown", (event) => {
+  if (!$("chat-suggestions").contains(event.target)) closeChatSuggestions();
+  if (!$("project-memory-panel").contains(event.target)) $("project-memory-panel").open = false;
+});
 $("export-chat").addEventListener("click", exportChat);
 $("reset-chat").addEventListener("click", resetChat);
 $("open-decision-canvas").addEventListener("click", openDecisionCanvas);

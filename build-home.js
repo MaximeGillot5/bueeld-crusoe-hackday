@@ -17,6 +17,8 @@
   let lastMissionOpener = null;
   let missionReturnView = null;
   let lastRoadmapOpener = null;
+  let roadmapTab = "current";
+  let roadmapAutoSelect = false;
   const metricMilestones = new Set(["problem_priority", "engagement_signal", "essential_task_success"]);
 
   function text(node, value) { node.textContent = value == null ? "" : String(value); }
@@ -24,11 +26,42 @@
   function currentMission() { return selectedMission || snapshot?.nextMission || null; }
   function missionId(mission) { return String(mission?.milestoneId || mission?.id || ""); }
   function readableError(error) { return error?.message || "The request could not be completed. Please try again."; }
+  function isValidated(milestone) { return milestone?.validated === true || ["validated", "earned"].includes(milestone?.status); }
+
+  function guidedMissionsInProgress(milestones) {
+    if (!getAccount().authenticated) return [];
+    const activeId = typeof readinessMissionId === "string" && readinessMissionId
+      ? readinessMissionId : typeof readinessResumeMissionId === "string" ? readinessResumeMissionId : "";
+    const linked = typeof readinessMissionChats !== "undefined" ? readinessMissionChats : new Map();
+    return milestones.filter((item) => !isValidated(item) &&
+      (missionId(item) === activeId || linked.has(missionId(item)) ||
+        item.draft?.answers?.some((answer) => answer?.trim()) || item.plannedCriterion))
+      .sort((a, b) => Number(missionId(b) === activeId) - Number(missionId(a) === activeId) ||
+        (linked.get(missionId(b))?.updatedAt || 0) - (linked.get(missionId(a))?.updatedAt || 0));
+  }
+
+  function guidedMissionInProgress(milestones) {
+    return guidedMissionsInProgress(milestones)[0] || null;
+  }
+
+  function resumeGuidedMission(mission) {
+    const id = missionId(mission);
+    if (!id) return;
+    history.replaceState(null, "", "#lia");
+    selectView("lia", { focus: true });
+    window.dispatchEvent(new CustomEvent("build:mission-guide", { detail: { missionId: id } }));
+  }
 
   function selectView(name, options = {}) {
     if (!byId("build-mission-details").hidden) closeMission(false);
+    const openingRoadmap = name === "roadmap" && currentView !== "roadmap";
     currentView = ["project", "roadmap", "lia"].includes(name) ? name : "project";
     if (currentView === "roadmap") lastRoadmapOpener = document.activeElement;
+    if (openingRoadmap) {
+      roadmapAutoSelect = true;
+      roadmapTab = guidedMissionInProgress(snapshot?.maturity?.milestones || []) ? "progress" : "current";
+      if (snapshot) renderRoadmap(snapshot.maturity);
+    }
     projectView.hidden = currentView === "lia";
     roadmapView.hidden = currentView !== "roadmap";
     liaView.hidden = currentView !== "lia";
@@ -115,6 +148,8 @@
     text(byId("build-state-note"), message);
     text(byId("build-next-action"), "Create a project →");
     byId("build-roadmap-percent").textContent = "—";
+    roadmapTab = "current";
+    syncRoadmapTabs(0, 0);
     const roadmap = byId("build-roadmap-list");
     roadmap.replaceChildren();
     const empty = document.createElement("div");
@@ -127,14 +162,116 @@
     roadmap.append(empty);
   }
 
+  function syncRoadmapTabs(inProgressCount, pastCount) {
+    text(byId("build-roadmap-progress-count"), inProgressCount);
+    text(byId("build-roadmap-past-count"), pastCount);
+    for (const tab of byId("build-roadmap-view").querySelectorAll("[data-roadmap-tab]")) {
+      const active = tab.dataset.roadmapTab === roadmapTab;
+      tab.classList.toggle("is-active", active);
+      tab.setAttribute("aria-selected", String(active));
+      tab.tabIndex = active ? 0 : -1;
+    }
+    byId("build-roadmap-list").setAttribute("aria-labelledby", `build-roadmap-tab-${roadmapTab}`);
+  }
+
+  function setRoadmapTab(tab, focus = false) {
+    if (!["current", "progress", "past"].includes(tab)) return;
+    roadmapAutoSelect = false;
+    roadmapTab = tab;
+    renderRoadmap(snapshot?.maturity || {});
+    if (focus) byId(`build-roadmap-tab-${tab}`).focus();
+  }
+
+  function roadmapEmpty(title, description) {
+    const empty = document.createElement("div");
+    empty.className = "build-roadmap-empty-view";
+    const heading = document.createElement("h2");
+    heading.textContent = title;
+    const copy = document.createElement("p");
+    copy.textContent = description;
+    const action = document.createElement("button");
+    action.type = "button";
+    action.className = "build-text-link";
+    action.textContent = "View current path →";
+    action.addEventListener("click", () => setRoadmapTab("current", true));
+    empty.append(heading, copy, action);
+    return empty;
+  }
+
+  function renderRoadmapFocus(mission) {
+    const draft = mission.draft || {};
+    const answers = Array.isArray(draft.answers) ? draft.answers : [];
+    const reviewed = Array.isArray(draft.reviewed) ? draft.reviewed : [];
+    const questions = Array.isArray(mission.questions) ? mission.questions : [];
+    const total = questions.length || Number(draft.totalSteps) || 0;
+    const count = Math.min(total, Number(draft.answeredCount) || 0);
+    const nextIndex = questions.findIndex((_, index) => !answers[index]?.trim() || reviewed[index] !== true);
+    const focus = document.createElement("section");
+    focus.className = "build-roadmap-focus";
+    const top = document.createElement("div");
+    top.className = "build-roadmap-focus-top";
+    const kicker = document.createElement("span");
+    kicker.className = "build-roadmap-focus-kicker";
+    const linked = typeof readinessMissionChats !== "undefined" ? readinessMissionChats.get(missionId(mission)) : null;
+    kicker.textContent = linked?.paused || (!linked && typeof readinessPaused !== "undefined" && readinessPaused)
+      ? "PAUSED · READY TO RESUME" : "IN PROGRESS · WITH LIA";
+    const score = document.createElement("span");
+    score.className = "build-roadmap-state";
+    score.textContent = total ? `${count} / ${total} reviewed` : "Ready to begin";
+    top.append(kicker, score);
+    const title = document.createElement("h2");
+    title.className = "build-roadmap-focus-title";
+    title.textContent = mission.title || "Your mission";
+    const copy = document.createElement("p");
+    copy.className = "build-roadmap-focus-copy";
+    copy.textContent = mission.description || "Continue working through this mission with Lia.";
+    const progressRow = document.createElement("div");
+    progressRow.className = "build-roadmap-focus-progress";
+    const progress = document.createElement("progress");
+    progress.max = Math.max(1, total);
+    progress.value = count;
+    progress.setAttribute("aria-label", "Mission answers reviewed by Lia");
+    const progressLabel = document.createElement("span");
+    progressLabel.textContent = total ? `${count} of ${total} answers reviewed` : "Ready for the first question";
+    progressRow.append(progress, progressLabel);
+    const question = document.createElement("p");
+    question.className = "build-roadmap-focus-question";
+    question.textContent = nextIndex >= 0 ? `Next with Lia: ${questions[nextIndex]}`
+      : "All answers reviewed. Confirm them in the chat when they reflect your real project.";
+    const actions = document.createElement("div");
+    actions.className = "build-roadmap-focus-actions";
+    const resume = document.createElement("button");
+    resume.type = "button";
+    resume.className = "build-primary-button";
+    resume.textContent = "Resume mission with Lia →";
+    resume.addEventListener("click", () => resumeGuidedMission(mission));
+    const note = document.createElement("span");
+    note.textContent = "Lia analyzes each chat reply before it becomes a mission answer.";
+    actions.append(resume, note);
+    focus.append(top, title, copy, progressRow, question, actions);
+    return focus;
+  }
+
   function renderRoadmap(maturity) {
     const milestones = Array.isArray(maturity?.milestones) ? maturity.milestones : [];
+    const inProgressMissions = guidedMissionsInProgress(milestones);
+    const pastCount = milestones.filter(isValidated).length;
+    syncRoadmapTabs(inProgressMissions.length, pastCount);
     const rawDimensions = Array.isArray(maturity?.dimensions) ? maturity.dimensions
       : maturity?.dimensions && typeof maturity.dimensions === "object"
         ? Object.entries(maturity.dimensions).map(([id, dimension]) => ({ id, ...dimension })) : [];
     const labels = { need: "Customer need", demand: "Demand", solution: "Solution", viability: "Pilot viability", customer_need: "Customer need", pilot_viability: "Pilot viability" };
     const list = byId("build-roadmap-list");
     list.replaceChildren();
+    if (roadmapTab === "progress") {
+      list.append(...(inProgressMissions.length ? inProgressMissions.map(renderRoadmapFocus)
+        : [roadmapEmpty("No mission in progress yet.", "Open your current path and start a mission with Lia. It will appear here while you work on it.")]));
+      return;
+    }
+    if (roadmapTab === "past" && !pastCount) {
+      list.append(roadmapEmpty("No past missions yet.", "Completed missions will collect here after their project evidence is confirmed."));
+      return;
+    }
     if (!rawDimensions.length) {
       const note = document.createElement("p");
       note.className = "build-roadmap-note";
@@ -156,7 +293,9 @@
       score.textContent = `${Math.max(0, earned)} / ${total}`;
       header.append(heading, score);
       group.append(header);
-      const ownMilestones = Array.isArray(dimension.milestones) ? dimension.milestones : milestones.filter((item) => [item.dimensionId, item.dimension, item.category].includes(id));
+      const dimensionMilestones = Array.isArray(dimension.milestones) ? dimension.milestones : milestones.filter((item) => [item.dimensionId, item.dimension, item.category].includes(id));
+      const ownMilestones = roadmapTab === "past" ? dimensionMilestones.filter(isValidated) : dimensionMilestones;
+      if (roadmapTab === "past" && !ownMilestones.length) continue;
       const items = document.createElement("ul");
       if (!ownMilestones.length) {
         const item = document.createElement("li");
@@ -165,13 +304,36 @@
       }
       for (const milestone of ownMilestones) {
         const item = document.createElement("li");
-        item.dataset.validated = String(milestone.validated === true || milestone.status === "validated" || milestone.status === "earned");
+        item.dataset.validated = String(isValidated(milestone));
+        const milestoneId = missionId(milestone);
+        const active = inProgressMissions.some((mission) => missionId(mission) === milestoneId);
+        item.classList.toggle("is-in-progress", Boolean(active));
         const titleNode = document.createElement("span");
         titleNode.textContent = milestone.title || milestone.label || "Mission milestone";
         const points = document.createElement("b");
         points.textContent = `${Number(milestone.weight ?? milestone.points ?? 0)} pts`;
         item.append(titleNode, points);
-        const milestoneId = String(milestone.id || milestone.milestoneId || "");
+        if (roadmapTab === "past" && milestone.validatedAt) {
+          const date = new Date(milestone.validatedAt);
+          if (Number.isFinite(date.getTime())) {
+            const when = document.createElement("time");
+            when.className = "build-roadmap-past-date";
+            when.dateTime = date.toISOString();
+            when.textContent = `Completed ${date.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}`;
+            item.append(when);
+          }
+        }
+        if (active) {
+          const state = document.createElement("small");
+          state.className = "build-roadmap-state";
+          state.textContent = "In progress";
+          const resume = document.createElement("button");
+          resume.type = "button";
+          resume.className = "build-text-link build-roadmap-open";
+          resume.textContent = "Resume with Lia →";
+          resume.addEventListener("click", () => resumeGuidedMission(milestone));
+          item.append(state, resume);
+        }
         if (metricMilestones.has(milestoneId) && !milestone.validated) {
           const prepared = milestone.plannedCriterion?.criterion;
           if (prepared) {
@@ -337,6 +499,10 @@
 
   function render(data) {
     snapshot = data;
+    if (roadmapAutoSelect) {
+      roadmapTab = guidedMissionInProgress(data?.maturity?.milestones || []) ? "progress" : "current";
+      roadmapAutoSelect = false;
+    }
     byId("build-home-grid").hidden = false;
     const project = data?.project || {};
     text(byId("build-project-title"), project.name || project.title || (projectMemory?.project || "Your project"));
@@ -500,6 +666,17 @@
   byId("build-readiness-start").addEventListener("click", openNextMission);
   byId("build-roadmap-close").addEventListener("click", closeRoadmap);
   byId("build-roadmap-backdrop").addEventListener("click", closeRoadmap);
+  const roadmapTabs = [...byId("build-roadmap-view").querySelectorAll("[data-roadmap-tab]")];
+  for (const tab of roadmapTabs) tab.addEventListener("click", () => setRoadmapTab(tab.dataset.roadmapTab));
+  byId("build-roadmap-view").querySelector(".build-roadmap-switcher").addEventListener("keydown", (event) => {
+    if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
+    const current = roadmapTabs.indexOf(document.activeElement);
+    if (current < 0) return;
+    event.preventDefault();
+    const next = event.key === "Home" ? 0 : event.key === "End" ? roadmapTabs.length - 1
+      : (current + (event.key === "ArrowRight" ? 1 : -1) + roadmapTabs.length) % roadmapTabs.length;
+    setRoadmapTab(roadmapTabs[next].dataset.roadmapTab, true);
+  });
   byId("build-ask-lia").addEventListener("click", () => selectView("lia", { focus: true }));
   byId("build-edit-context").addEventListener("click", openContext);
   byId("build-open-sources").addEventListener("click", () => byId("open-sources")?.click());

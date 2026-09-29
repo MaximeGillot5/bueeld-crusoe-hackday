@@ -481,6 +481,27 @@ export function createMaturityStore({ dataDir = process.env.LAB_DATA_DIR || join
         return { changed: true, value: snapshot(project, ownerId, projectId) };
       });
     },
+    resetGuidedMission({ ownerId, projectId, milestoneId }) {
+      ownerId = identifier(ownerId, 'owner ID');
+      projectId = identifier(projectId, 'project ID');
+      milestoneId = identifier(milestoneId, 'milestone ID');
+      if (!MILESTONE_BY_ID.has(milestoneId)) throw fail(404, 'Unknown milestone.');
+      return mutate((draft) => {
+        const project = locate(draft, ownerId, projectId);
+        if (project?.credits.some((item) => item.milestoneId === milestoneId && !item.revokedAt)) {
+          throw fail(409, 'This mission is already completed.');
+        }
+        if (!project?.drafts?.[milestoneId]) {
+          return { changed: false, value: snapshot(project, ownerId, projectId) };
+        }
+        delete project.drafts[milestoneId];
+        project.history.push({ id: randomUUID(), type: 'draft_reset', milestoneId,
+          at: new Date().toISOString() });
+        // Predeclared numeric criteria remain fixed so observations cannot be
+        // relabeled against a more convenient threshold after a reset.
+        return { changed: true, value: snapshot(project, ownerId, projectId) };
+      });
+    },
     completeGuidedMission({ ownerId, projectId, milestoneId, confirmed, requestId,
       observed, experimentEvidence, projectName, projectSummary }) {
       ownerId = identifier(ownerId, 'owner ID');

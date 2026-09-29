@@ -131,16 +131,33 @@
       </section>
       <section class="build-view build-roadmap-view" id="build-roadmap-view" role="dialog" aria-modal="true" aria-labelledby="build-roadmap-title" tabindex="-1" hidden>
         <button type="button" class="build-roadmap-backdrop" id="build-roadmap-backdrop" aria-label="Close missions"></button>
-        <div class="build-page-shell"><div class="build-roadmap-top"><p class="build-kicker">02 / YOUR PATH</p><button type="button" class="build-text-link" id="build-roadmap-close">Close ✕</button></div><div class="build-roadmap-heading"><div><h1 id="build-roadmap-title">Every mission moves BUEELD forward.</h1><p id="build-roadmap-intro">Four dimensions lead to a first pilot. Each validated milestone adds its announced points once.</p></div><div class="build-roadmap-score"><strong id="build-roadmap-percent">0%</strong><span>PROJECT MATURITY</span></div></div><div class="build-roadmap-list" id="build-roadmap-list"></div><p class="build-roadmap-note">At 100%, BUEELD considers this project ready for the first pilot defined in this path. This is a readiness measure, not a promise of commercial success.</p></div>
+        <div class="build-page-shell"><div class="build-roadmap-top"><p class="build-kicker">02 / YOUR PATH</p><button type="button" class="build-text-link" id="build-roadmap-close">Close ✕</button></div><div class="build-roadmap-heading"><div><h1 id="build-roadmap-title">Every mission moves BUEELD forward.</h1><p id="build-roadmap-intro">Four dimensions lead to a first pilot. Each validated milestone adds its announced points once.</p></div><div class="build-roadmap-score"><strong id="build-roadmap-percent">0%</strong><span>PROJECT MATURITY</span></div></div>
+          <div class="build-roadmap-switcher" role="tablist" aria-label="Mission views">
+            <button type="button" class="build-roadmap-tab is-active" id="build-roadmap-tab-current" role="tab" data-roadmap-tab="current" aria-controls="build-roadmap-list" aria-selected="true" tabindex="0">Current path</button>
+            <button type="button" class="build-roadmap-tab is-progress" id="build-roadmap-tab-progress" role="tab" data-roadmap-tab="progress" aria-controls="build-roadmap-list" aria-selected="false" tabindex="-1">In progress <span class="build-roadmap-tab-count" id="build-roadmap-progress-count">0</span></button>
+            <button type="button" class="build-roadmap-tab" id="build-roadmap-tab-past" role="tab" data-roadmap-tab="past" aria-controls="build-roadmap-list" aria-selected="false" tabindex="-1">Past missions <span class="build-roadmap-tab-count" id="build-roadmap-past-count">0</span></button>
+          </div>
+          <div class="build-roadmap-list" id="build-roadmap-list" role="tabpanel" aria-labelledby="build-roadmap-tab-current"></div><p class="build-roadmap-note">At 100%, BUEELD considers this project ready for the first pilot defined in this path. This is a readiness measure, not a promise of commercial success.</p></div>
       </section>
       <section class="chat-workspace" aria-labelledby="chat-title" hidden>
         <h1 id="chat-title" class="visually-hidden">Conversation with Lia, your AI co-founder</h1>
         <div class="chat-view-toolbar">
-          <span class="chat-view-toolbar-label">Conversation with Lia</span>
+          <div class="chat-view-toolbar-primary">
+            <div class="chat-thread-switcher" id="chat-thread-switcher">
+              <button type="button" class="chat-thread-trigger" id="chat-thread-trigger" aria-expanded="false" aria-controls="chat-thread-panel" aria-label="Choose a chat">
+                <svg class="chat-thread-icon" viewBox="0 0 20 20" aria-hidden="true" focusable="false"><path d="M4.75 4.75h10.5a2 2 0 0 1 2 2v6a2 2 0 0 1-2 2H9l-4.25 2.5v-2.5a2 2 0 0 1-2-2v-6a2 2 0 0 1 2-2Z"/><path d="M6.5 8h7M6.5 11h5"/></svg><span class="chat-thread-title" id="chat-thread-title">Chats</span><span class="chat-thread-title-mobile" aria-hidden="true">Chats</span><span class="chat-thread-count" id="chat-thread-count" hidden>0</span><svg class="chat-thread-chevron" viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path d="m4.25 6.25 3.75 3.5 3.75-3.5"/></svg>
+              </button>
+              <div class="chat-thread-panel" id="chat-thread-panel" aria-label="Saved chats" hidden>
+                <div class="chat-thread-panel-head"><strong>Your chats</strong><small id="chat-thread-total"></small></div>
+                <div class="chat-thread-list" id="chat-thread-list"></div>
+                <div class="chat-thread-guest" id="chat-thread-guest" hidden><p>Sign in to keep several chats and switch between them.</p><button type="button" id="chat-thread-signin">Sign in or create account</button></div>
+              </div>
+            </div>
+            <button type="button" class="chat-new-button" id="reset-chat" aria-label="Create a new chat"><span aria-hidden="true">+</span><span class="chat-new-label">New chat</span></button>
+          </div>
           <div class="chat-view-toolbar-actions">
             <button type="button" class="chat-demo-button" id="start-demo" aria-label="Try Lia in 2 minutes, guided example, no account" title="Guided example · no account"><span class="chat-demo-label">Try Lia in 2 minutes</span><span class="chat-demo-label-short">Try Lia</span><span aria-hidden="true">↗</span></button>
             <button type="button" id="open-sources">Sources</button>
-            <button type="button" id="reset-chat">New chat</button>
           </div>
         </div>
         <div class="chat-transcript" id="chat-transcript" role="log" aria-label="Conversation with Lia" aria-live="polite" aria-relevant="additions text">
@@ -183,7 +200,7 @@
             <div class="readiness-chat-question" id="readiness-chat-question" hidden><span>LIA ASKS</span><p id="readiness-chat-question-text"></p><small>Reply or ask for help below. Lia reviews every message before saving an answer.</small></div>
             <div class="readiness-chat-review" id="readiness-chat-review" hidden><span>READY FOR YOUR REVIEW</span><p id="readiness-chat-review-copy">Review your answers above. Confirm them to complete this mission and update your project progress.</p><div class="readiness-chat-observed" id="readiness-chat-observed" hidden><p id="readiness-chat-fixed-target"></p><label for="readiness-chat-observed-value">Observed result</label><input id="readiness-chat-observed-value" type="number" step="any" placeholder="What did you measure?" /><small>The measured value must meet the threshold you set before the test.</small></div><div class="readiness-chat-experiment-note" id="readiness-chat-experiment-note" hidden><label for="readiness-chat-experiment-select">Completed public test</label><select id="readiness-chat-experiment-select"><option value="">Choose a closed, analyzed test</option></select><button type="button" id="readiness-chat-refresh-tests">Refresh tests</button><small>The test must have at least one response from the stated audience.</small></div><label><input id="readiness-chat-confirm" type="checkbox" /> <span id="readiness-chat-confirm-copy">These answers accurately describe my project and any results are real.</span></label><button type="button" id="readiness-chat-complete" disabled>Confirm &amp; complete mission <span aria-hidden="true">→</span></button></div>
             <div class="readiness-chat-finished" id="readiness-chat-finished" hidden><span>MISSION COMPLETE</span><p id="readiness-chat-finished-text"></p><div><button type="button" id="readiness-chat-next">Start next mission <span aria-hidden="true">→</span></button><button type="button" id="readiness-chat-project">View project</button></div></div>
-            <div class="readiness-chat-actions" id="readiness-chat-actions"><button type="button" id="readiness-chat-tool" hidden></button><button type="button" id="readiness-chat-pause">Pause mission · ask Lia freely</button></div>
+            <div class="readiness-chat-actions" id="readiness-chat-actions"><button type="button" id="readiness-chat-tool" hidden></button><button type="button" id="readiness-chat-pause">Pause mission · ask Lia freely</button><button type="button" id="readiness-chat-reset">Restart mission</button></div>
             <p class="readiness-chat-status" id="readiness-chat-status" role="status" aria-live="polite"></p>
           </section>
           <div class="chat-typing" id="chat-typing" role="status" aria-live="polite" hidden><span class="typing-indicator" aria-hidden="true"></span><span>Lia is thinking</span><span class="typing-dots" aria-hidden="true"><i></i><i></i><i></i></span></div>
@@ -233,32 +250,9 @@
             <p class="learning-status" id="learning-status" role="status" aria-live="polite"></p>
             <div class="mission-learning-actions"><button type="button" class="mission-primary-button" id="mission-review-result">Review result with Lia</button><button type="button" class="mission-primary-button" id="mission-use-learning" hidden>Plan this next step</button><button type="button" class="mission-text-button" id="mission-copy-learning" hidden>Copy learning</button></div>
           </section>
-          <div class="mission-chat-empty" id="mission-chat-empty" hidden><p>Ready to put an idea to the test?</p><button type="button" class="mission-secondary-button" id="mission-chat-ask">Find my next mission <span aria-hidden="true">↗</span></button></div>
         </div>
 
         <div class="composer-dock">
-          <details class="project-memory-panel" id="project-memory-panel">
-            <summary id="project-memory-summary">
-              <span class="project-memory-icon" aria-hidden="true"><svg viewBox="0 0 20 20" fill="none"><rect x="3.75" y="3.75" width="12.5" height="12.5" rx="2.5" stroke="currentColor" stroke-width="1.5"/><path d="M6.75 8h6.5M6.75 11h4.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg></span>
-              <span class="project-memory-summary-copy"><strong>What Lia knows</strong><span id="project-memory-detail">Add project context</span></span>
-              <span class="project-memory-chevron" aria-hidden="true"><svg viewBox="0 0 20 20" fill="none"><path d="m5.5 7.5 4.5 4.5 4.5-4.5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
-            </summary>
-            <section class="readiness-saved-facts" id="readiness-saved-facts" aria-labelledby="readiness-saved-facts-title" hidden><div class="readiness-saved-facts-head"><h3 id="readiness-saved-facts-title">Saved project facts</h3><p>These are founder-reported details saved through your missions. Lia can use them across conversations.</p></div><div id="readiness-saved-facts-list"></div></section>
-            <form id="project-memory-form">
-              <div class="project-memory-fields">
-                <div><label for="memory-project">Project</label><input id="memory-project" name="project" type="text" maxlength="350" autocomplete="off" placeholder="What are you building?" /></div>
-                <div><label for="memory-target">Target audience</label><input id="memory-target" name="target" type="text" maxlength="350" autocomplete="off" placeholder="Who is it for?" /></div>
-                <div><label for="memory-goal">Current goal</label><input id="memory-goal" name="goal" type="text" maxlength="350" autocomplete="off" placeholder="What do you want to achieve?" /></div>
-                <div><label for="memory-blocker">Main blocker</label><input id="memory-blocker" name="blocker" type="text" maxlength="350" autocomplete="off" placeholder="What is holding you back?" /></div>
-              </div>
-              <div class="project-memory-actions"><p id="memory-status" role="status" aria-live="polite"></p><button type="submit" class="mission-secondary-button" id="memory-save">Save context</button></div>
-            </form>
-          </details>
-          <div class="chat-shortcuts" id="chat-shortcuts" hidden>
-            <span>Continue the conversation</span>
-            <button type="button" class="followup-prompt" data-prompt="Turn your last recommendation into concrete actions for this week, with an owner and a measure for each action. Do not invent completed work.">Plan this week's actions</button>
-            <button type="button" class="followup-prompt" data-demo-only="true" data-prompt="In this fictional Atelier Loop demo, the return rate was 68% against a 70% target. What changes in your recommendation, and what should we test next?">Demo: missed 70% target</button>
-          </div>
           <div class="active-sources" id="active-sources" hidden><span class="active-sources-label">PROJECT CONTEXT</span><span id="active-sources-names"></span><button type="button" id="manage-sources">Manage</button></div>
           <div class="mission-bar" id="mission-bar" hidden aria-live="polite">
             <div class="mission-summary"><span class="mission-kicker" id="mission-status">Mission proposed</span><p id="mission-excerpt"></p></div>
@@ -278,12 +272,45 @@
             <textarea id="chat-input" name="message" rows="1" maxlength="1500" placeholder="Ask Lia a question…" required></textarea>
             <button class="chat-send" id="chat-send" type="submit" aria-label="Send message to Lia" disabled>Send</button>
           </form>
-          <div class="chat-meta"><span>Enter sends · Shift + Enter adds a line</span><span id="chat-count">0 / 1500</span></div>
+          <div class="chat-context-row">
+            <details class="project-memory-panel" id="project-memory-panel">
+              <summary id="project-memory-summary">
+                <span class="project-memory-icon" aria-hidden="true"><svg viewBox="0 0 20 20" fill="none"><rect x="3.75" y="3.75" width="12.5" height="12.5" rx="2.5" stroke="currentColor" stroke-width="1.5"/><path d="M6.75 8h6.5M6.75 11h4.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg></span>
+                <span class="project-memory-summary-copy"><strong>What Lia knows</strong><span id="project-memory-detail">Add project context</span></span>
+                <span class="project-memory-chevron" aria-hidden="true"><svg viewBox="0 0 20 20" fill="none"><path d="m5.5 7.5 4.5 4.5 4.5-4.5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+              </summary>
+              <div class="project-memory-content">
+              <section class="readiness-saved-facts" id="readiness-saved-facts" aria-labelledby="readiness-saved-facts-title" hidden><div class="readiness-saved-facts-head"><h3 id="readiness-saved-facts-title">Saved project facts</h3><p>These are founder-reported details saved through your missions. Lia can use them across conversations.</p></div><div id="readiness-saved-facts-list"></div></section>
+              <form id="project-memory-form">
+                <div class="project-memory-fields">
+                  <div><label for="memory-project">Project</label><input id="memory-project" name="project" type="text" maxlength="350" autocomplete="off" placeholder="What are you building?" /></div>
+                  <div><label for="memory-target">Target audience</label><input id="memory-target" name="target" type="text" maxlength="350" autocomplete="off" placeholder="Who is it for?" /></div>
+                  <div><label for="memory-goal">Current goal</label><input id="memory-goal" name="goal" type="text" maxlength="350" autocomplete="off" placeholder="What do you want to achieve?" /></div>
+                  <div><label for="memory-blocker">Main blocker</label><input id="memory-blocker" name="blocker" type="text" maxlength="350" autocomplete="off" placeholder="What is holding you back?" /></div>
+                </div>
+                <div class="project-memory-actions"><p id="memory-status" role="status" aria-live="polite"></p><button type="submit" class="mission-secondary-button" id="memory-save">Save context</button></div>
+              </form>
+              </div>
+            </details>
+            <div class="chat-suggestions" id="chat-suggestions" hidden>
+              <button type="button" class="chat-suggestions-trigger" id="chat-suggestions-trigger" aria-expanded="false" aria-controls="chat-suggestions-panel"><span class="chat-suggestions-spark" aria-hidden="true">✦</span>Suggestions</button>
+              <div class="chat-suggestions-panel" id="chat-suggestions-panel" role="group" aria-label="Conversation suggestions" hidden>
+                <div class="chat-suggestions-head"><strong>Suggestions</strong><span>Keep the conversation moving</span></div>
+                <div class="chat-suggestions-actions" id="chat-suggestions-actions" hidden></div>
+                <div class="mission-chat-empty" id="mission-chat-empty" hidden><p>Ready to put an idea to the test?</p><button type="button" class="mission-secondary-button" id="mission-chat-ask">Find my next mission</button></div>
+                <div class="chat-shortcuts" id="chat-shortcuts" hidden>
+                  <span>Continue the conversation</span>
+                  <button type="button" class="followup-prompt" data-prompt="Turn your last recommendation into concrete actions for this week, with an owner and a measure for each action. Do not invent completed work.">Plan this week's actions</button>
+                  <button type="button" class="followup-prompt" data-demo-only="true" data-prompt="In this fictional Atelier Loop demo, the return rate was 68% against a 70% target. What changes in your recommendation, and what should we test next?">Demo: missed 70% target</button>
+                </div>
+                <button type="button" class="chat-suggestion-demo" id="chat-suggestion-demo">Try Lia in 2 minutes</button>
+              </div>
+            </div>
+          </div>
+          <span id="chat-count" hidden>0 / 1500</span>
           <p class="chat-status" id="chat-status" role="status" aria-live="polite"></p>
           <div class="account-save-row" id="account-save-row" role="status" aria-live="polite" hidden><span id="account-save-label">Saved to Lab</span><button type="button" id="account-save-retry" hidden>Retry save</button></div>
           <p class="demo-quota-alert" id="demo-quota-alert" role="status" aria-live="polite" hidden></p>
-          <details class="privacy-disclosure"><summary>Privacy &amp; AI use</summary><p id="demo-usage">Shared demo AI calls: checking allowance…</p><p>Your chat and mission drafts are saved in this browser; signed-in work also syncs to this BUEELD server. When you ask Lia for analysis, the relevant message, saved project context, mission and selected source summaries are sent by the server to Crusoe Foundry. If Crusoe credits are exhausted, the same request is sent through AdaL using the connected ChatGPT account. Files are read in your browser when you choose Analyze; selected extracted text is then sent for analysis. Connected items are sent only after you select them and click Analyze. Your responses and evidence may be stored on this server so you can resume your project. Lia's reviews are recommendations; publishing a test and validating a mission remain your decisions. The guided sample is fictional.</p></details>
-          <nav class="lab-legal-links" aria-label="Lab policies"><a href="/privacy.html" target="_blank" rel="noopener">Privacy</a><a href="/terms.html" target="_blank" rel="noopener">Terms</a></nav>
           <p class="chat-storage-warning" id="chat-storage-warning" role="status" aria-live="polite" hidden>Browser storage is unavailable. This conversation will be lost when you close the page.</p>
         </div>
       </section>
@@ -431,6 +458,7 @@
             <div class="source-results-list" id="source-results-list"></div>
             <div class="source-discuss"><p>Select up to three summaries. Their summaries, not the raw files, accompany your next chat messages.</p><button type="button" class="source-primary" id="discuss-sources" disabled>Discuss selected sources with Lia</button></div>
           </section>
+          <details class="privacy-disclosure"><summary>Privacy &amp; AI use</summary><p id="demo-usage">Shared demo AI calls: checking allowance…</p><p>Your chat and mission drafts are saved in this browser; signed-in work also syncs to this BUEELD server. When you ask Lia for analysis, the relevant message, saved project context, mission and selected source summaries are sent by the server to Crusoe Foundry. If Crusoe credits are exhausted, the same request is sent through AdaL using the connected ChatGPT account. Files are read in your browser when you choose Analyze; selected extracted text is then sent for analysis. Connected items are sent only after you select them and click Analyze. Your responses and evidence may be stored on this server so you can resume your project. Lia's reviews are recommendations; publishing a test and validating a mission remain your decisions. The guided sample is fictional.</p></details>
         </div>
       </section>
     </div>

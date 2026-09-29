@@ -186,6 +186,70 @@ test('guided mission answers persist, can be revised, and only confirmed answers
   });
 });
 
+test('reset clears only the selected pending mission draft and persists across restart', async () => {
+  await withStore(async (store, dataDir) => {
+    const mission = { ownerId: 'founder_a', projectId: 'build', milestoneId: 'target_problem' };
+    const otherMission = { ...mission, milestoneId: 'value_proposition' };
+    const otherProject = { ...mission, projectId: 'another' };
+    const otherOwner = { ...mission, ownerId: 'founder_b' };
+    await store.saveGuidedAnswer({ ...mission, stepIndex: 0, answer: 'Early-stage founders', reviewed: true });
+    await store.saveGuidedAnswer({ ...mission, stepIndex: 1,
+      answer: 'They lack relevant venture capital introductions.', reviewed: false });
+    for (const item of [otherMission, otherProject, otherOwner]) {
+      await store.saveGuidedAnswer({ ...item, stepIndex: 0,
+        answer: 'A different saved answer', reviewed: true });
+    }
+
+    const reset = await store.resetGuidedMission(mission);
+    assert.deepEqual(reset.maturity.milestones[0].draft, {
+      answers: ['', '', ''], reviewed: [false, false, false],
+      answeredCount: 0, totalSteps: 3, complete: false,
+    });
+    assert.equal(reset.maturity.percent, 0);
+    assert.equal(reset.history.at(-1).type, 'draft_reset');
+    assert.equal(reset.history.at(-1).milestoneId, 'target_problem');
+    assert.equal((await store.resetGuidedMission(mission)).history.length, reset.history.length,
+      'repeating a reset without new answers is a no-op');
+
+    const restarted = createMaturityStore({ dataDir });
+    assert.deepEqual((await restarted.getSnapshot(mission)).nextMission.draft.answers, ['', '', '']);
+    for (const item of [otherMission, otherProject, otherOwner]) {
+      const snapshot = await restarted.getSnapshot(item);
+      assert.equal(snapshot.maturity.milestones.find((milestone) => milestone.id === item.milestoneId)
+        .draft.answers[0], 'A different saved answer');
+    }
+  });
+});
+
+test('reset preserves a predeclared criterion and refuses a validated mission', async () => {
+  await withStore(async (store, dataDir) => {
+    const metric = { ownerId: 'founder_a', projectId: 'build', milestoneId: 'problem_priority' };
+    const criterion = { comparison: 'at_least', threshold: 3, unit: 'founders' };
+    await store.setCriterion({ ...metric, criterion });
+    await store.saveGuidedAnswer({ ...metric, stepIndex: 0,
+      answer: 'At least three founders call this urgent.', reviewed: true });
+    await store.saveGuidedAnswer({ ...metric, stepIndex: 1,
+      answer: 'Five founders provided priority ratings.', reviewed: true });
+    const reset = await store.resetGuidedMission(metric);
+    const milestone = reset.maturity.milestones.find((item) => item.id === 'problem_priority');
+    assert.deepEqual(milestone.draft.answers, ['', '', '']);
+    assert.deepEqual(milestone.plannedCriterion.criterion, criterion);
+    assert.deepEqual((await createMaturityStore({ dataDir }).getSnapshot(metric))
+      .maturity.milestones.find((item) => item.id === 'problem_priority').plannedCriterion.criterion,
+    criterion);
+
+    const completed = { ...metric, milestoneId: 'target_problem' };
+    await store.saveGuidedAnswer({ ...completed, stepIndex: 0,
+      answer: 'First-time founders', reviewed: true });
+    await store.validateMilestone({ ...completed, evidence: realEvidence(), source: manual, outcome: 'met' });
+    await assert.rejects(store.resetGuidedMission(completed),
+      (error) => error.status === 409 && /already completed/.test(error.message));
+    const after = await store.getSnapshot(completed);
+    assert.equal(after.maturity.percent, 5);
+    assert.equal(after.maturity.milestones[0].draft.answers[0], 'First-time founders');
+  });
+});
+
 test('every mission turn is analyzed before an exact founder answer is saved', async () => {
   await withStore(async (store) => {
     const project = { ownerId: 'founder_a', projectId: 'build' };
