@@ -172,7 +172,7 @@ async function reviewMissionResult() {
       projectMemory: cleanProjectMemory(projectMemory)
     });
     const learning = cleanMissionLearning(data.learning);
-    if (data.source !== "adal" || !learning) throw new Error("Lia's review was incomplete. Try again; your result is still saved.");
+    if (data.source !== "crusoe" || !learning) throw new Error("Lia's review was incomplete. Try again; your result is still saved.");
     if (generation !== workspaceGeneration || !missionTracker.records.includes(record) || record.status !== "completed" || recordVersion !== JSON.stringify([record.content, record.evidence, record.outcome, record.realEvidence])) return;
     if (record.outcome !== "met" && learning.recommendation === "continue") throw new Error("The review did not account for your result. Please retry.");
     record.learning = learning;

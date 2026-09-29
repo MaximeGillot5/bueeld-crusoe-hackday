@@ -19,7 +19,7 @@ const PROVIDERS = {
   notion: { name: 'Notion', family: 'notion' },
 };
 const sessions = new Map();
-const sessionDirectory = join(dirname(fileURLToPath(import.meta.url)), '.data');
+const sessionDirectory = process.env.LAB_DATA_DIR || join(dirname(fileURLToPath(import.meta.url)), '.data');
 const sessionFile = join(sessionDirectory, 'auth-sessions.json');
 
 function sessionKey(id) { return createHash('sha256').update(id).digest('hex'); }

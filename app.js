@@ -198,7 +198,7 @@ async function postJson(path, body) {
       body: JSON.stringify(body)
     });
   } catch {
-    throw new Error("The AdaL service could not be reached. Check that the local server is running and try again.");
+    throw new Error("The Lia service could not be reached. Check that the local server is running and try again.");
   }
   let data;
   try {
@@ -371,20 +371,20 @@ async function generatePlan(event) {
   const brief = state.brief.trim();
   const evidence = state.evidence.trim();
   if (!brief || !evidence) {
-    setStatus("plan-status", "Add both a founder brief and evidence before asking AdaL.", "error");
+    setStatus("plan-status", "Add both a founder brief and evidence before asking Lia.", "error");
     (!brief ? $("brief-input") : $("evidence-input")).focus();
     return;
   }
   planBusy = true;
-  setBusy("plan-button", "plan-form", true, "AdaL is shaping the decision…");
-  setStatus("plan-status", "AdaL is comparing options and designing a test.");
+  setBusy("plan-button", "plan-form", true, "Lia is shaping the decision…");
+  setStatus("plan-status", "Lia is comparing options and designing a test.");
   try {
     const data = await postJson("/api/plan", { brief, evidence });
     if (state.brief.trim() !== brief || state.evidence.trim() !== evidence) {
-      throw new Error("The context changed while AdaL was working. Generate a new plan for the latest brief.");
+      throw new Error("The context changed while Lia was working. Generate a new plan for the latest brief.");
     }
-    if (data.source !== "adal" || !isPlan(data.plan) || typeof data.planId !== "string" || !data.planId) {
-      throw new Error("AdaL returned an incomplete plan. Please try again.");
+    if (data.source !== "crusoe" || !isPlan(data.plan) || typeof data.planId !== "string" || !data.planId) {
+      throw new Error("Lia returned an incomplete plan. Please try again.");
     }
     state.plan = data.plan;
     state.planId = data.planId;
@@ -395,7 +395,7 @@ async function generatePlan(event) {
     state.metThreshold = null;
     $("result-input").value = "";
     $("notes-input").value = "";
-    addJournal(`AdaL proposed an experiment: ${data.plan.recommendedExperiment.description}`);
+    addJournal(`Lia proposed an experiment: ${data.plan.recommendedExperiment.description}`);
     render();
     setStatus("plan-status", "Plan ready. Review the assumption and set your success bar.", "success");
     $("plan-section").scrollIntoView({ behavior: "smooth", block: "start" });
@@ -479,7 +479,7 @@ function updateResult() {
   if (state.review) {
     state.review = null;
     state.metThreshold = null;
-    setStatus("review-status", "The result changed. Ask AdaL to reassess it again.");
+    setStatus("review-status", "The result changed. Ask Lia to reassess it again.");
     renderWorkflow();
   }
   persist();
@@ -504,8 +504,8 @@ async function reassess(event) {
     comparison: state.plan.recommendedExperiment.comparison,
     notes: state.result.notes.trim()
   };
-  setBusy("review-button", "review-form", true, "AdaL is reassessing…");
-  setStatus("review-status", "AdaL is comparing the result with your approved threshold.");
+  setBusy("review-button", "review-form", true, "Lia is reassessing…");
+  setStatus("review-status", "Lia is comparing the result with your approved threshold.");
   try {
     const data = await postJson("/api/review", {
       planId: state.planId,
@@ -517,10 +517,10 @@ async function reassess(event) {
       result: { value, notes: snapshot.notes }
     });
     if (!state.approved || state.planId !== snapshot.planId || state.chosenOption !== snapshot.chosenOption || state.plan.recommendedExperiment.threshold !== snapshot.threshold || state.plan.recommendedExperiment.comparison !== snapshot.comparison || state.result.value.trim() !== raw || state.result.notes.trim() !== snapshot.notes) {
-      throw new Error("The approved choice, bar, or result changed while AdaL was working. Reassess the latest version.");
+      throw new Error("The approved choice, bar, or result changed while Lia was working. Reassess the latest version.");
     }
-    if (data.source !== "adal" || !isReview(data.review) || typeof data.metThreshold !== "boolean") {
-      throw new Error("AdaL returned an incomplete assessment. Please try again.");
+    if (data.source !== "crusoe" || !isReview(data.review) || typeof data.metThreshold !== "boolean") {
+      throw new Error("Lia returned an incomplete assessment. Please try again.");
     }
     const { threshold, comparison } = state.plan.recommendedExperiment;
     const locallyMet = comparison === "more_than" ? value > threshold : value >= threshold;
@@ -530,9 +530,9 @@ async function reassess(event) {
     state.review = data.review;
     state.metThreshold = data.metThreshold;
     state.result.value = String(value);
-    addJournal(`AdaL reassessed the measured result (${value} ${state.plan.recommendedExperiment.unit}): ${data.review.status}.`);
+    addJournal(`Lia reassessed the measured result (${value} ${state.plan.recommendedExperiment.unit}): ${data.review.status}.`);
     render();
-    setStatus("review-status", "Assessment ready. Review AdaL's reasoning below.", "success");
+    setStatus("review-status", "Assessment ready. Review Lia's reasoning below.", "success");
     $("review-section").scrollIntoView({ behavior: "smooth", block: "start" });
   } catch (error) {
     setStatus("review-status", error.message || "The assessment could not be completed.", "error");
@@ -558,7 +558,7 @@ function exportMarkdown() {
     "## Evidence so far",
     state.evidence,
     "",
-    "## Facts identified by AdaL",
+    "## Facts identified by Lia",
     ...plan.facts.map((fact) => `- ${fact}`),
     "",
     "## Risky assumption",
@@ -584,7 +584,7 @@ function exportMarkdown() {
     `- Human approved: ${state.approved ? "yes" : "no"}`
   ];
   if (review) {
-    lines.push("", "## Result and reassessment", `- Measured result: ${result.value} ${experiment.unit}`, `- Success bar met: ${state.metThreshold ? "yes" : "no"}`, `- Notes: ${result.notes || "None provided"}`, `- AdaL recommendation: ${review.status}`, "", review.rationale, "", "### Next steps", ...review.nextSteps.map((step) => `- ${step}`));
+    lines.push("", "## Result and reassessment", `- Measured result: ${result.value} ${experiment.unit}`, `- Success bar met: ${state.metThreshold ? "yes" : "no"}`, `- Notes: ${result.notes || "None provided"}`, `- Lia recommendation: ${review.status}`, "", review.rationale, "", "### Next steps", ...review.nextSteps.map((step) => `- ${step}`));
   }
   lines.push("", "## Decision journal", ...state.journal.map((entry) => `- ${new Date(entry.at).toLocaleString()}: ${entry.text}`), "");
   const blob = new Blob([lines.join("\n")], { type: "text/markdown;charset=utf-8" });
@@ -963,7 +963,7 @@ async function analyzeSources(path, payload, label, origin, autoSelect = false) 
   setSourceBusy(true, "Lia is analyzing the selected source context…");
   try {
     const data = await postJson(path, payload);
-    if (!validAnalysisResponse(data)) throw new Error("AdaL returned an incomplete source analysis.");
+    if (!validAnalysisResponse(data)) throw new Error("Lia returned an incomplete source analysis.");
     const selected = autoSelect && selectedSourceEntries().length < SOURCE_CONTEXT_LIMIT;
     sourceEntries.unshift({
       id: crypto.randomUUID(), label, origin, sources: data.sources,
@@ -976,7 +976,7 @@ async function analyzeSources(path, payload, label, origin, autoSelect = false) 
     else $("source-results").scrollIntoView({ block: "start", behavior: "smooth" });
     return true;
   } catch (error) {
-    setSourceStatus(error.message || "AdaL could not analyze this source. Try again.", true);
+    setSourceStatus(error.message || "Lia could not analyze this source. Try again.", true);
     if ($("source-drawer").hidden) setChatStatus(error.message || "Source analysis failed. Open Sources to retry.", true);
     return false;
   } finally {
@@ -991,7 +991,7 @@ function renderConnectorItems() {
   if (!activeConnectorId) return;
   const registry = SOURCE_REGISTRY.find((entry) => entry.id === activeConnectorId);
   $("connector-items-title").textContent = (registry?.name || "Connected account") + " · choose items";
-  $("connector-items-intro").textContent = "Select up to four items from your " + (registry?.name || "account") + ". Only selected text will go to AdaL after you click Analyze.";
+  $("connector-items-intro").textContent = "Select up to four items from your " + (registry?.name || "account") + ". Only selected text will go to Lia after you click Analyze.";
   const rows = connectorItems.map((item) => {
     const label = el("label", "connector-item");
     const input = document.createElement("input");
@@ -1019,7 +1019,7 @@ async function browseConnector(id) {
     connectorItems = data.items.filter((item) => typeof item?.id === "string" && item.id && typeof item?.name === "string").slice(0, 50);
     activeConnectorId = id;
     renderConnectorItems();
-    setSourceStatus("Choose up to four items, then click Analyze. Their text stays out of AdaL until then.");
+    setSourceStatus("Choose up to four items, then click Analyze. Their text stays out of Lia until then.");
     $("connector-items-section").scrollIntoView({ block: "start", behavior: "smooth" });
   } catch (error) {
     setSourceStatus(error.message || "Could not load connected items.", true);
@@ -1167,7 +1167,7 @@ function setChatFile() {
     return;
   }
   pendingAttachment = file;
-  setChatStatus("File attached locally. Click Analyze & use in chat to send its extracted text to AdaL.");
+  setChatStatus("File attached locally. Click Analyze & use in chat to send its extracted text to Lia.");
   renderChat();
 }
 
@@ -1330,7 +1330,7 @@ function discussSelectedSources() {
 }
 
 // The conversation is separate from the optional, structured decision canvas.
-// Only completed exchanges are sent back to AdaL as context; the backend stores no transcript.
+// Only completed exchanges are sent back to Lia as context; the backend stores no transcript.
 const CHAT_STORAGE_KEY = "bueeld-lab-chat-v2";
 const MISSION_STORAGE_KEY = "bueeld-lab-pinned-mission-v1";
 const CHAT_LIMIT = 1500;
@@ -1446,6 +1446,7 @@ function persistMissionTracker() {
     $("mission-feedback").textContent = "Browser storage is unavailable. Mission progress may be lost when this page closes.";
   }
   if (accountSession.authenticated && !autosaveMuted) { missionDirty = true; missionRevision += 1; scheduleMissionSync(); }
+  window.dispatchEvent(new Event("build:workspace-changed"));
 }
 
 function ensureMissionRecord(mission) {
@@ -2246,7 +2247,7 @@ function renderChat(scroll = false) {
       retry.type = "button";
       retry.dataset.retryId = message.id;
       retry.disabled = chatBusy || sourceBusy || isDemoQuotaExhausted();
-      body.append(el("p", "message-error", "AdaL did not answer this message."), retry);
+      body.append(el("p", "message-error", "Lia did not answer this message."), retry);
     }
     if (message.role === "assistant" && message.id === latestAssistant?.id) {
       const actions = el("div", "response-actions");
@@ -2329,8 +2330,8 @@ async function requestChatReply(message) {
       throw new Error("Selected context is too large for one message. Remove a source summary or unpin the mission, then retry.");
     }
     const data = await postJson("/api/chat", body);
-    if (data.source !== "adal" || typeof data.message !== "string" || !data.message.trim()) {
-      throw new Error("AdaL returned an empty reply. Please retry.");
+    if (data.source !== "crusoe" || typeof data.message !== "string" || !data.message.trim()) {
+      throw new Error("Lia returned an empty reply. Please retry.");
     }
     message.status = "complete";
     chatMessages.push({
@@ -2342,7 +2343,7 @@ async function requestChatReply(message) {
   } catch (error) {
     message.status = "failed";
     persistChat();
-    setChatStatus(error.message || "AdaL could not answer. Try again.", true);
+    setChatStatus(error.message || "Lia could not answer. Try again.", true);
   } finally {
     chatBusy = false;
     renderChat(true);
@@ -2463,11 +2464,11 @@ function exportChat() {
   if (!chatMessages.length) return;
   const lines = [
     "# Bueeld Lab conversation", "",
-    "_AI Co-Founder Hackathon prototype. Conversation processed by AdaL when messages were sent. Any Atelier Loop example is fictional._", ""
+    "_AI Co-Founder Hackathon prototype. Conversation processed by Lia when messages were sent. Any Atelier Loop example is fictional._", ""
   ];
   for (const message of chatMessages) {
     lines.push(`## ${message.role === "assistant" ? "Lia" : "Founder"} · ${new Date(message.at).toLocaleString()}`, "", message.content, "");
-    if (message.status === "failed") lines.push("_This message did not receive an AdaL reply._", "");
+    if (message.status === "failed") lines.push("_This message did not receive an Lia reply._", "");
   }
   if (pinnedMission) lines.push("## Pinned next mission", "", `Status: ${pinnedMission.status} (local human decision only)`, "", pinnedMission.content, "");
   const blob = new Blob([lines.join("\n")], { type: "text/markdown;charset=utf-8" });
@@ -2549,7 +2550,7 @@ function useChatContext() {
   $("brief-input").value = founderMessages.join("\n\n").slice(0, 3000);
   $("evidence-input").value = "";
   updateContext();
-  setStatus("plan-status", "Your own messages were copied here. Add observed evidence before asking AdaL for a decision plan.");
+  setStatus("plan-status", "Your own messages were copied here. Add observed evidence before asking Lia for a decision plan.");
   openDecisionCanvas();
   $("evidence-input").focus({ preventScroll: true });
 }
@@ -2829,6 +2830,7 @@ function loadAccountWorkspace() {
   autosaveMuted = false;
   updateSaveIndicator();
   if (typeof loadProjectMemory === "function") void loadProjectMemory();
+  window.dispatchEvent(new Event("build:workspace-changed"));
 }
 
 async function loadServerMissionTracker() {

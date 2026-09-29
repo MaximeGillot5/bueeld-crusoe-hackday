@@ -6,7 +6,7 @@ import { promisify } from 'node:util';
 import { ensureLabSession, getLabSession, rotateLabSession, revokeLabUserSessions } from './connectors.mjs';
 
 const scrypt = promisify(scryptCallback);
-const directory = join(dirname(fileURLToPath(import.meta.url)), '.data');
+const directory = process.env.LAB_DATA_DIR || join(dirname(fileURLToPath(import.meta.url)), '.data');
 const accountsFile = join(directory, 'accounts.json');
 const MAX_ACCOUNTS = 50;
 const MAX_CONVERSATIONS = 12;
@@ -20,6 +20,8 @@ const signupsByAddress = new Map();
 let globalAttempts = { count: 0, resetAt: 0 };
 let store = { version: 1, accounts: [] };
 let mutations = Promise.resolve();
+let accountDeletionHook = async () => {};
+const deletingAccounts = new Set();
 const fakeSalt = randomBytes(16).toString('hex');
 const fakeHash = randomBytes(64);
 
@@ -261,9 +263,25 @@ function assertCurrentSession(req, session, userId = session?.userId) {
 function accountFor(req) {
   const session = getLabSession(req);
   if (!session?.userId) throw fail(401, 'Sign in to your Lab account first.');
+  if (deletingAccounts.has(session.userId)) throw fail(409, 'Account deletion is in progress.');
   const account = store.accounts.find((item) => item.id === session.userId);
   if (!account) throw fail(401, 'Sign in to your Lab account again.');
   return { account, session };
+}
+export function registerAccountDeletionHook(hook) {
+  if (typeof hook !== 'function') throw new TypeError('Account deletion hook must be a function.');
+  accountDeletionHook = hook;
+}
+export function projectForLabSession(req) {
+  const { account } = accountFor(req);
+  const memory = normalizeProjectMemory(account.projectMemory);
+  return {
+    ownerId: account.id,
+    projectId: account.id,
+    projectName: memory.project || 'Your project',
+    projectSummary: [memory.target, memory.goal].filter(Boolean).join(' · '),
+    projectMemory: memory,
+  };
 }
 function summary(conversation) {
   return { id: conversation.id, title: conversation.title, createdAt: conversation.createdAt,
@@ -344,17 +362,23 @@ export async function handleAccountRoute(req, res, url) {
       const candidate = await derive(password, account.salt);
       assertCurrentSession(req, session, account.id);
       if (!timingSafeEqual(candidate, Buffer.from(account.hash, 'hex'))) throw fail(401, 'Invalid password.');
-      await mutate(() => {
-        assertCurrentSession(req, session, account.id);
-        const index = store.accounts.findIndex((item) => item.id === account.id);
-        if (index === -1) throw fail(404, 'Account not found.');
-        // Revoke durable sessions before removing the identity they authorize.
+      if (deletingAccounts.has(account.id)) throw fail(409, 'Account deletion is already in progress.');
+      deletingAccounts.add(account.id);
+      try {
+        // Keep the identity and session available if a related-store deletion fails.
+        // Every related-store hook is idempotent, so the owner can retry safely.
+        await accountDeletionHook(account.id);
+        await mutate(() => {
+          assertCurrentSession(req, session, account.id);
+          const index = store.accounts.findIndex((item) => item.id === account.id);
+          if (index === -1) throw fail(404, 'Account not found.');
+          store.accounts.splice(index, 1);
+        });
         revokeLabUserSessions(account.id);
-        store.accounts.splice(index, 1);
-      });
-      const next = ensureLabSession(req);
-      send(res, 200, { deleted: true, authenticated: false, csrfToken: next.session.csrfToken }, { 'Set-Cookie': next.setCookie });
-      return true;
+        const next = ensureLabSession(req);
+        send(res, 200, { deleted: true, authenticated: false, csrfToken: next.session.csrfToken }, { 'Set-Cookie': next.setCookie });
+        return true;
+      } finally { deletingAccounts.delete(account.id); }
     }
     if (projectMemoryPath) {
       if (req.method === 'GET') {

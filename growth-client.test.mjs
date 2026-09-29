@@ -251,7 +251,7 @@ for (const outcome of ["missed", "inconclusive"]) {
     const review = h.run("reviewMissionResult()");
     assert.equal(h.calls.post.at(-1).path, "/api/mission/learn");
     assert.equal(h.calls.post.at(-1).body.mission.outcome, outcome);
-    h.calls.post.at(-1).resolve({ source: "adal", learning: learning("continue") });
+    h.calls.post.at(-1).resolve({ source: "crusoe", learning: learning("continue") });
     await review;
     assert.equal(record.learning, undefined);
     assert.equal(h.calls.persisted.length, 0);
@@ -264,7 +264,7 @@ test("an incomplete or untrusted review is rejected while a valid adaptive revie
   const h = harness();
   const record = mission();
   h.setRecords([record]);
-  for (const response of [{ source: "fallback", learning: learning("iterate") }, { source: "adal", learning: { ...learning("iterate"), decision: "" } }]) {
+  for (const response of [{ source: "fallback", learning: learning("iterate") }, { source: "crusoe", learning: { ...learning("iterate"), decision: "" } }]) {
     const review = h.run("reviewMissionResult()");
     h.calls.post.at(-1).resolve(response);
     await review;
@@ -273,7 +273,7 @@ test("an incomplete or untrusted review is rejected while a valid adaptive revie
     assert.match(h.element("learning-status").textContent, /incomplete/);
   }
   const review = h.run("reviewMissionResult()");
-  h.calls.post.at(-1).resolve({ source: "adal", learning: learning("iterate") });
+  h.calls.post.at(-1).resolve({ source: "crusoe", learning: learning("iterate") });
   await review;
   assert.equal(record.learning.recommendation, "iterate");
   assert.equal(h.calls.persisted.length, 1);
@@ -289,7 +289,7 @@ test("a review returned after a workspace change is ignored", async () => {
   h.context.workspaceGeneration++;
   const current = mission({ id: "new-workspace-mission", outcome: "met" });
   h.setRecords([current]);
-  h.calls.post.at(-1).resolve({ source: "adal", learning: learning("iterate") });
+  h.calls.post.at(-1).resolve({ source: "crusoe", learning: learning("iterate") });
   await review;
   assert.equal(previous.learning, undefined);
   assert.equal(current.learning, undefined);
@@ -306,7 +306,7 @@ test("a stale review cannot release the busy state of work in the new workspace"
   h.setRecords([mission({ id: "new-workspace-mission" })]);
   h.context.chatBusy = true;
   h.run('reviewingMissionId = "new-workspace-mission"');
-  h.calls.post.at(-1).resolve({ source: "adal", learning: learning("iterate") });
+  h.calls.post.at(-1).resolve({ source: "crusoe", learning: learning("iterate") });
   await review;
   assert.equal(h.context.chatBusy, true);
   assert.equal(h.run("reviewingMissionId"), "new-workspace-mission");
@@ -319,7 +319,7 @@ test("a review returned after the evidence changes is ignored", async () => {
   h.setRecords([record]);
   const review = h.run("reviewMissionResult()");
   record.evidence = "Updated observation: none of the three tutors completed the booking unaided.";
-  h.calls.post.at(-1).resolve({ source: "adal", learning: learning("iterate") });
+  h.calls.post.at(-1).resolve({ source: "crusoe", learning: learning("iterate") });
   await review;
   assert.equal(record.learning, undefined);
   assert.equal(h.calls.persisted.length, 0);

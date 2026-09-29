@@ -3,30 +3,33 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta name="theme-color" content="#f6f8fc" />
-    <meta name="description" content="Bueeld Lab is a conversational AI co-founder prototype powered by AdaL." />
-    <title>Lia — Bueeld Lab</title>
+    <meta name="theme-color" content="#f8f7f1" />
+    <meta name="description" content="BUEELD turns your next startup decision into a mission, evidence, and measurable progress." />
+    <title>BUEELD — Your next mission</title>
     <link rel="stylesheet" href="./styles.css" />
     <link rel="stylesheet" href="./progress.css" />
+    <link rel="stylesheet" href="./build-home.css" />
     <script src="./demo-tour.js" defer></script>
     <script src="./lab-growth.js" defer></script>
     <script src="./app.js" defer></script>
     <script src="./progress-panel.js" defer></script>
+    <script src="./build-home.js" defer></script>
+    <script src="./build-experiments.js" defer></script>
   </head>
   <body>
-    <a class="skip-link" href="#main">Skip to conversation</a>
+    <a class="skip-link" href="#main">Skip to main content</a>
     <header class="app-header">
       <div class="app-identity">
-        <a class="wordmark" href="https://bueeld.com/" target="_blank" rel="noopener noreferrer" aria-label="Bueeld, opens in a new tab">
-          <svg class="bueeld-logo" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 280 120" width="110" height="47" role="img" aria-label="bueeld" focusable="false">
-            <defs><linearGradient id="bueeld-logo-gradient" x1="0%" y1="0%" x2="100%" y2="0%"><stop offset="0%" stop-color="#101828" /><stop offset="100%" stop-color="#6254d8" /></linearGradient></defs>
-            <text x="10" y="85" font-family="Outfit, system-ui, sans-serif" font-size="76" font-weight="800" fill="url(#bueeld-logo-gradient)" letter-spacing="-1.5" aria-hidden="true">bueeld</text>
-          </svg>
+        <a class="wordmark build-wordmark" href="#project" aria-label="BUEELD — Project home">
+          BUEELD<span aria-hidden="true">/</span>
         </a>
         <span class="identity-divider" aria-hidden="true"></span>
-        <div class="lia-identity"><span class="lia-indicator" aria-hidden="true"></span><strong>Lia</strong><span class="lab-label">AI CO-FOUNDER</span></div>
+        <div class="lia-identity"><span class="lia-indicator" aria-hidden="true"></span><strong>AI Conference edition</strong><span class="lab-label">CRUSOE</span></div>
       </div>
       <nav class="header-actions" aria-label="Workspace actions">
+        <button type="button" class="header-action build-nav-link" id="build-nav-project" data-build-view="project" aria-current="page">Project</button>
+        <button type="button" class="header-action build-nav-link" id="build-nav-roadmap" data-build-view="roadmap">Missions</button>
+        <button type="button" class="header-action build-nav-link" id="build-nav-lia" data-build-view="lia">Ask Lia</button>
         <button type="button" class="header-action" id="open-missions">Progress <span class="mission-nav-badge" id="mission-nav-badge" hidden>0</span></button>
         <button type="button" class="header-action" id="open-sources">Sources</button>
         <button type="button" class="header-action" id="open-account" aria-label="Account and saved conversations">Account</button>
@@ -50,7 +53,67 @@
     </header>
 
     <main id="main" class="app-main">
-      <section class="chat-workspace" aria-labelledby="chat-title">
+      <section class="build-view build-project-view" id="build-project-view" aria-labelledby="build-project-title">
+        <div class="build-page-shell">
+          <div class="build-context-line"><span class="build-live-dot" aria-hidden="true"></span><span>YOUR BUEELD WORKSPACE</span><span class="build-context-divider" aria-hidden="true">/</span><span>FIRST PILOT</span></div>
+          <div class="build-project-heading">
+            <div><p class="build-kicker">01 / YOUR PROJECT</p><h1 id="build-project-title">One mission at a time.</h1><p class="build-project-summary" id="build-project-summary">Your project, its evidence, and the next useful step in one place.</p></div>
+            <button type="button" class="build-link-button" id="build-edit-context">Edit project context <span aria-hidden="true">↗</span></button>
+          </div>
+          <p class="build-state-note" id="build-state-note" role="status" aria-live="polite">Checking your project…</p>
+          <div class="build-home-grid" id="build-home-grid" hidden>
+            <section class="build-maturity-card" aria-labelledby="build-maturity-title">
+              <div class="build-card-heading"><span class="build-kicker">PROJECT READINESS</span><span class="build-card-index">01 / 04</span></div>
+              <p class="build-maturity-number"><strong id="build-maturity-value">0</strong><span>%</span></p>
+              <h2 id="build-maturity-title">Maturity for your first pilot</h2>
+              <p class="build-maturity-copy" id="build-maturity-copy">Progress is earned when a mission's evidence is validated.</p>
+              <progress id="build-maturity-progress" max="100" value="0" aria-label="Project maturity toward the first pilot">0%</progress>
+              <div class="build-maturity-foot"><span id="build-maturity-status">Building</span><button type="button" class="build-text-link" id="build-open-roadmap">What remains to validate <span aria-hidden="true">→</span></button></div>
+            </section>
+            <section class="build-next-card" aria-labelledby="build-next-title">
+              <div class="build-card-heading"><span class="build-kicker">NEXT MISSION</span><span class="build-mission-gain" id="build-mission-gain" hidden>+0 pts</span></div>
+              <h2 id="build-next-title">A useful next step is coming.</h2>
+              <p class="build-next-description" id="build-next-description">BUEELD will suggest a mission grounded in your project and the evidence you already have.</p>
+              <p class="build-next-criterion" id="build-next-criterion" hidden></p>
+              <div class="build-next-actions"><button type="button" class="build-primary-button" id="build-next-action">Open mission <span aria-hidden="true">→</span></button><button type="button" class="build-secondary-button" id="build-ask-lia">Ask Lia</button></div>
+            </section>
+          </div>
+          <button type="button" class="build-modal-backdrop" id="build-mission-backdrop" aria-label="Close mission" hidden></button>
+          <section class="build-mission-details" id="build-mission-details" role="dialog" aria-modal="true" aria-labelledby="build-mission-details-title" tabindex="-1" hidden>
+            <div class="build-detail-top"><div><p class="build-kicker">MISSION BRIEF</p><h2 id="build-mission-details-title">What to do</h2></div><button type="button" class="build-text-link" id="build-mission-details-close">Close</button></div>
+            <ol class="build-mission-steps" id="build-mission-steps"></ol>
+            <p class="build-mission-proof" id="build-mission-proof"></p>
+            <section class="build-experiment-card" id="build-experiment-card" aria-labelledby="build-experiment-title" hidden>
+              <div class="build-detail-top"><div><p class="build-kicker">SHAREABLE TEST</p><h3 id="build-experiment-title">Test interest with real people.</h3></div><span class="build-experiment-state" id="build-experiment-state">Draft</span></div>
+              <p class="build-experiment-intro">Set a clear question and success threshold. You approve the public form before sharing it.</p>
+              <form id="build-experiment-form" class="build-experiment-form">
+                <div class="build-experiment-fields"><div><label for="build-exp-title">Test title</label><input id="build-exp-title" maxlength="120" required placeholder="Would people try this idea?" /></div><div><label for="build-exp-audience">Who should answer?</label><input id="build-exp-audience" maxlength="220" required placeholder="Independent shop owners in San Francisco" /></div></div>
+                <div><label for="build-exp-hypothesis">Hypothesis</label><textarea id="build-exp-hypothesis" rows="2" maxlength="500" required placeholder="If we offer X to Y, enough people will choose Z."></textarea></div>
+                <div><label for="build-exp-question">One measurable question</label><input id="build-exp-question" maxlength="220" required placeholder="Would you try this in the next month?" /></div>
+                <div class="build-experiment-fields"><div><label for="build-exp-option-yes">Response A</label><input id="build-exp-option-yes" maxlength="90" required value="Yes, I would try it" /></div><div><label for="build-exp-option-no">Response B</label><input id="build-exp-option-no" maxlength="90" required value="Not right now" /></div></div>
+                <div class="build-experiment-fields"><div><label for="build-exp-success">Response that signals interest</label><select id="build-exp-success"><option value="0">Response A</option><option value="1">Response B</option></select></div><div class="build-experiment-threshold"><label for="build-exp-minimum">Success threshold</label><span><input id="build-exp-minimum" type="number" min="1" max="100" value="10" required /> responses, <input id="build-exp-percent" type="number" min="1" max="100" value="40" required />% interested</span></div></div>
+                <div class="build-experiment-actions"><button type="submit" class="build-primary-button" id="build-exp-save">Prepare draft <span aria-hidden="true">→</span></button><button type="button" class="build-secondary-button" id="build-exp-publish" hidden>Approve &amp; publish</button><button type="button" class="build-secondary-button" id="build-exp-refresh" hidden>Refresh results</button><button type="button" class="build-secondary-button" id="build-exp-close" hidden>Close test</button><button type="button" class="build-secondary-button" id="build-exp-review" hidden>Analyze with Lia</button><button type="button" class="build-secondary-button" id="build-exp-apply" hidden>Use as mission evidence</button></div>
+              </form>
+              <div class="build-experiment-public" id="build-exp-public" hidden><span>PUBLIC FORM</span><a id="build-exp-link" href="#" target="_blank" rel="noopener noreferrer"></a><button type="button" class="build-text-link" id="build-exp-copy">Copy link</button></div>
+              <div id="build-exp-results" class="build-experiment-results" hidden><h4>Results</h4><p id="build-exp-count"></p><p id="build-exp-signal"></p><p id="build-exp-review-text"></p><ul id="build-exp-comments"></ul></div>
+              <p id="build-exp-status" class="build-experiment-status" role="status" aria-live="polite"></p>
+            </section>
+            <form id="build-evidence-form" class="build-evidence-form">
+              <div><label for="build-evidence-summary">What did you actually observe?</label><textarea id="build-evidence-summary" rows="3" minlength="30" maxlength="1500" required placeholder="Describe the result, who or what it came from, and the measure you used."></textarea></div>
+              <div class="build-evidence-row"><div><label for="build-evidence-reference">Evidence reference <span>(optional)</span></label><input id="build-evidence-reference" type="text" maxlength="300" placeholder="Link, document name, or source" /></div><div><label for="build-evidence-outcome">Outcome</label><select id="build-evidence-outcome"><option value="met">Criterion met</option><option value="learned">Test completed; learned what to change</option></select></div></div>
+              <div class="build-evidence-metric" id="build-evidence-metric" hidden><p id="build-evidence-metric-criterion"></p><label for="build-evidence-observed">Observed numeric result</label><input id="build-evidence-observed" type="number" step="any" placeholder="Measured value" /></div>
+              <label class="build-evidence-attestation"><input type="checkbox" id="build-evidence-real" required /> This is evidence from my real project, not the sample demo.</label>
+              <div class="build-evidence-actions"><p id="build-evidence-status" role="status" aria-live="polite"></p><button type="submit" class="build-primary-button" id="build-evidence-submit">Submit evidence for validation <span aria-hidden="true">→</span></button></div>
+            </form>
+          </section>
+          <div class="build-home-footer"><p>BUEELD turns decisions into testable missions. Lia helps you prepare the work; your results determine progress.</p><button type="button" class="build-text-link" id="build-open-sources">Project sources <span aria-hidden="true">↗</span></button></div>
+        </div>
+      </section>
+      <section class="build-view build-roadmap-view" id="build-roadmap-view" role="dialog" aria-modal="true" aria-labelledby="build-roadmap-title" tabindex="-1" hidden>
+        <button type="button" class="build-roadmap-backdrop" id="build-roadmap-backdrop" aria-label="Close missions"></button>
+        <div class="build-page-shell"><div class="build-roadmap-top"><p class="build-kicker">02 / YOUR PATH</p><button type="button" class="build-text-link" id="build-roadmap-close">Close ✕</button></div><div class="build-roadmap-heading"><div><h1 id="build-roadmap-title">Every mission moves BUEELD forward.</h1><p id="build-roadmap-intro">Four dimensions lead to a first pilot. Each validated milestone adds its announced points once.</p></div><div class="build-roadmap-score"><strong id="build-roadmap-percent">0%</strong><span>PROJECT MATURITY</span></div></div><div class="build-roadmap-list" id="build-roadmap-list"></div><p class="build-roadmap-note">At 100%, BUEELD considers this project ready for the first pilot defined in this path. This is a readiness measure, not a promise of commercial success.</p></div>
+      </section>
+      <section class="chat-workspace" aria-labelledby="chat-title" hidden>
         <h1 id="chat-title" class="visually-hidden">Conversation with Lia, your AI co-founder</h1>
         <div class="chat-transcript" id="chat-transcript" role="log" aria-label="Conversation with Lia" aria-live="polite" aria-relevant="additions text">
           <div class="chat-empty" id="chat-empty">
@@ -66,7 +129,7 @@
               <button type="button" class="welcome-path" id="start-project"><span class="welcome-path-index">02</span><strong>Analyze a project</strong><span>Bring a file, a public repo, or a fictional sample workspace.</span></button>
             </div>
             <div class="starter-prompts" aria-label="Conversation starters">
-              <button type="button" class="starter-prompt" data-prompt="I'm building Bueeld, a product that helps incubators and founders turn scattered startup updates into structured context and a human-approved next mission. Lia already helps founders in chat with mission guidance and expected evidence. For this hackathon, help me shape one small AI co-founder interaction that improves the loop from a founder's blocker to a measurable next mission and proof. Start by identifying the riskiest assumption and proposing two ways to test it this week. Treat missing traction or customer results as unknown; do not invent them.">Work on Bueeld</button>
+              <button type="button" class="starter-prompt" data-prompt="I'm building BUEELD, a product that helps incubators and founders turn scattered startup updates into structured context and a human-approved next mission. Lia already helps founders in chat with mission guidance and expected evidence. Help me identify the riskiest assumption and propose one small test with measurable proof. Treat missing traction or customer results as unknown; do not invent them.">Work on BUEELD</button>
               <button type="button" class="starter-prompt" data-prompt="Atelier Loop is a fictional circular-delivery startup. We interviewed 12 shop owners; three are ready to pilot. We do not know route density or collection cost. Challenge our decision to launch a neighborhood pilot now versus validating economics for another month.">Challenge a pilot decision</button>
               <button type="button" class="starter-prompt" data-prompt="I have an early-stage startup idea. Act as my co-founder: ask me the most important question first, then help me identify the riskiest assumption and a small test.">Pressure-test an idea</button>
               <button type="button" class="starter-prompt" data-prompt="Help me turn a startup goal into concrete actions for this week. Ask what you need to know before proposing a plan, and make the decision points explicit.">Plan the next week</button>
@@ -174,7 +237,7 @@
           <p class="chat-status" id="chat-status" role="status" aria-live="polite"></p>
           <div class="account-save-row" id="account-save-row" role="status" aria-live="polite" hidden><span id="account-save-label">Saved to Lab</span><button type="button" id="account-save-retry" hidden>Retry save</button></div>
           <p class="demo-quota-alert" id="demo-quota-alert" role="status" aria-live="polite" hidden></p>
-          <details class="privacy-disclosure"><summary>Privacy &amp; AI use</summary><p id="demo-usage">Shared demo AI calls: checking allowance…</p><p>Your transcript, pinned mission, mission history, local Lab points, drops, and areas explored are saved in this browser per account; mission history can be cleared in Progress. Saved project context stays in this browser and syncs to your Lab account when signed in. When you send, your message, recent conversation, pinned mission, saved project context, and selected source summaries go to AdaL; the connected ChatGPT account may process them. Files are read in your browser only when you choose Analyze; extracted text then goes to AdaL. Connected account items are fetched and sent for analysis only when you select them and click Analyze. Source cards clear on reload; related local chat replies remain until New chat. A server-saved copy remains until you delete it in Account. Review result with Lia sends the mission, your reported evidence, outcome, and saved project context to AdaL. Reviews are recommendations and use one AI call. Mission approval and evidence are human decisions. Signed-in chats, setup answers, selected summaries, and mission history sync to this Lab server automatically. Guest drafts are sent only if you explicitly copy and save them. Saved conversations can be removed from Account. This prototype does not execute outside actions.</p></details>
+          <details class="privacy-disclosure"><summary>Privacy &amp; AI use</summary><p id="demo-usage">Shared demo AI calls: checking allowance…</p><p>Your chat and mission drafts are saved in this browser; signed-in work also syncs to this BUEELD server. When you ask Lia for analysis, the relevant message, saved project context, mission and selected source summaries are sent by the server to Crusoe Foundry. Files are read in your browser when you choose Analyze; selected extracted text is then sent for analysis. Connected items are sent only after you select them and click Analyze. Your responses and evidence may be stored on this server so you can resume your project. Lia's reviews are recommendations; publishing a test and validating a mission remain your decisions. The guided sample is fictional.</p></details>
           <nav class="lab-legal-links" aria-label="Lab policies"><a href="/privacy.html" target="_blank" rel="noopener">Privacy</a><a href="/terms.html" target="_blank" rel="noopener">Terms</a></nav>
           <p class="chat-storage-warning" id="chat-storage-warning" role="status" aria-live="polite" hidden>Browser storage is unavailable. This conversation will be lost when you close the page.</p>
         </div>
@@ -189,7 +252,7 @@
         <header class="account-panel-header"><div><p class="account-kicker">BUEELD LAB</p><h2 id="account-title">Account &amp; conversations</h2><p>A small demo account for returning to your work.</p></div><button type="button" class="account-close" id="account-close">Close</button></header>
         <div class="account-panel-scroll">
           <p class="account-note">A temporary Lab account saves your chats and missions. Use a unique password; there is no email verification or recovery.</p>
-          <details class="account-privacy"><summary>Privacy and storage</summary><p>This account is separate from Bueeld. Signed-in chats, setup answers, selected source summaries, project context, mission history, and saved learning reviews save automatically on this Lab server. Guest drafts remain in this browser until you explicitly copy and save them. Your password is never stored in this browser. Raw files and OAuth tokens are excluded from saved chats, but Lia's replies may quote or summarize private source material.</p></details>
+          <details class="account-privacy"><summary>Privacy and storage</summary><p>This BUEELD edition uses a separate Lab account. Signed-in chats, setup answers, project context, mission history and saved reviews sync to this server. Guest drafts remain in this browser until you explicitly copy and save them. Your password is never stored in this browser. Raw files and OAuth tokens are excluded from saved chats, but Lia's replies may quote or summarize selected private source material.</p></details>
           <p class="account-status" id="account-status" role="status" aria-live="polite"></p>
           <div id="account-signed-out">
             <div class="account-guest-restore" id="account-guest-restore" hidden><p>A previous local guest draft is hidden on this shared browser.</p><button type="button" id="account-restore-guest">Restore local guest draft</button></div>
@@ -265,7 +328,7 @@
           <button type="button" class="source-close" id="source-close">Close</button>
         </header>
         <div class="source-scroll">
-          <p class="source-intro">Bring project context into Lia. Only what you select for analysis is sent to AdaL.</p>
+          <p class="source-intro">Bring project context into Lia. Only what you select for analysis is sent to Crusoe Foundry.</p>
           <p class="source-status" id="source-status" role="status" aria-live="polite"></p>
 
           <section class="source-section source-sample" aria-labelledby="sample-title">
@@ -282,7 +345,7 @@
 
           <section class="source-section" aria-labelledby="local-source-title">
             <div class="source-section-heading"><div><span class="source-eyebrow">YOUR OWN FILE</span><h3 id="local-source-title">Import a file</h3></div><span class="source-availability" id="local-availability">Checking availability…</span></div>
-            <p>Analyze a PDF or text export. Selectable PDF text only; scanned images need OCR. <span class="source-format-extra">.txt, .md, .csv, .json, .eml and .ics also work. Only the text you choose to Analyze goes to AdaL.</span></p>
+            <p>Analyze a PDF or text export. Selectable PDF text only; scanned images need OCR. <span class="source-format-extra">.txt, .md, .csv, .json, .eml and .ics also work. Only the text you choose to Analyze goes to Crusoe Foundry.</span></p>
             <p class="source-import-hint" id="source-import-hint" hidden></p>
             <form id="local-source-form" class="source-inline-form">
               <label for="local-source-file">File to analyze</label>
@@ -313,13 +376,13 @@
 
           <section class="source-section" id="connector-items-section" aria-labelledby="connector-items-title" hidden>
             <div class="source-section-heading"><div><span class="source-eyebrow">CONNECTED ACCOUNT</span><h3 id="connector-items-title">Choose items</h3></div></div>
-            <p id="connector-items-intro">Select up to four items to analyze. Only selected text goes to AdaL.</p>
+            <p id="connector-items-intro">Select up to four items to analyze. Only selected text goes to Crusoe Foundry.</p>
             <div class="connector-items-list" id="connector-items-list"></div>
             <div class="connector-item-actions"><button type="button" class="source-primary" id="connector-import" disabled>Analyze selected with Lia</button><button type="button" id="connector-items-close">Close list</button></div>
           </section>
 
           <section class="source-section" id="source-results" aria-labelledby="source-results-title" hidden>
-            <div class="source-section-heading"><div><span class="source-eyebrow">ADAL ANALYSIS</span><h3 id="source-results-title">Analyzed context</h3></div></div>
+            <div class="source-section-heading"><div><span class="source-eyebrow">LIA ANALYSIS · CRUSOE</span><h3 id="source-results-title">Analyzed context</h3></div></div>
             <div class="source-results-list" id="source-results-list"></div>
             <div class="source-discuss"><p>Select up to three summaries. Their summaries, not the raw files, accompany your next chat messages.</p><button type="button" class="source-primary" id="discuss-sources" disabled>Discuss selected sources with Lia</button></div>
           </section>
@@ -347,23 +410,23 @@
             </ol>
             <div class="sidebar-footnote"><span class="tiny-spark" aria-hidden="true">✳</span><p>Built for founders who would rather learn something true than hear a confident guess.</p></div>
           </div>
-          <div class="trust-note"><span aria-hidden="true">◎</span><p>Your draft and decision log stay in this browser. Your brief and evidence are sent to AdaL only when you request an analysis.</p></div>
+          <div class="trust-note"><span aria-hidden="true">◎</span><p>Your draft and decision log stay in this browser. Your brief and evidence are sent to Crusoe Foundry only when you request an analysis.</p></div>
         </aside>
 
         <div class="content-stack">
           <section class="panel brief-panel" id="brief-section" aria-labelledby="brief-title">
             <div class="section-topline"><span class="section-index">01 / FRAME THE SIGNAL</span><span class="section-state" id="brief-state">READY TO START</span></div>
-            <div class="section-intro"><h2 id="brief-title">What is the founder facing?</h2><p>Give AdaL the situation and the evidence you actually have. The Atelier Loop example is fictional and ready to try.</p></div>
+            <div class="section-intro"><h2 id="brief-title">What is the founder facing?</h2><p>Give Lia the situation and the evidence you actually have. The Atelier Loop example is fictional and ready to try.</p></div>
             <form id="plan-form" novalidate>
               <div class="field"><label for="brief-input">Founder brief <span class="required">*</span></label><textarea id="brief-input" name="brief" rows="5" required spellcheck="true"></textarea><p class="field-help">Describe the decision, the constraints, and what a useful next step would answer.</p></div>
               <div class="field"><label for="evidence-input">Evidence so far <span class="required">*</span></label><textarea id="evidence-input" name="evidence" rows="4" required spellcheck="true"></textarea><p class="field-help">Interviews, commitments, numbers, or gaps. Separate observations from assumptions.</p></div>
-              <div class="form-actions"><button class="button button-primary" type="submit" id="plan-button">Ask AdaL to shape the decision <span aria-hidden="true">↗</span></button><span class="action-hint">AI draft · human judgment</span></div>
+              <div class="form-actions"><button class="button button-primary" type="submit" id="plan-button">Ask Lia to shape the decision <span aria-hidden="true">↗</span></button><span class="action-hint">AI draft · human judgment</span></div>
               <p class="form-status" id="plan-status" role="status" aria-live="polite"></p>
             </form>
           </section>
 
           <section class="panel" id="plan-section" aria-labelledby="plan-title" hidden>
-            <div class="section-topline"><span class="section-index">02 / CHALLENGE THE BET</span><span class="source-badge">GENERATED WITH ADAL</span></div>
+            <div class="section-topline"><span class="section-index">02 / CHALLENGE THE BET</span><span class="source-badge">GENERATED WITH CRUSOE</span></div>
             <div class="section-intro"><h2 id="plan-title">A decision, not just an answer.</h2><p>Review the assumptions and alternatives before you commit to a test.</p></div>
 
             <div class="plan-block"><h3>What we know</h3><ul class="fact-list" id="facts-list"></ul></div>
@@ -374,16 +437,16 @@
             </div>
             <div class="experiment-card"><div class="experiment-title"><div><p class="small-heading">RECOMMENDED EXPERIMENT</p><h3 id="experiment-description"></h3></div></div><div class="experiment-details"><div><span>MEASURE</span><strong id="experiment-metric"></strong></div><div><span>TIMEBOX</span><strong id="experiment-duration"></strong></div></div><div class="evidence-checklist"><p>Evidence to collect</p><ul id="evidence-list"></ul></div></div>
 
-            <form id="approval-form" class="approval-form" novalidate><div class="approval-header"><div><p class="small-heading">03 / HUMAN CHECKPOINT</p><h3>Set the success bar.</h3></div><span class="human-badge">YOU DECIDE</span></div><p class="approval-copy">AdaL suggested a threshold. Edit it if needed, then approve the experiment before entering results.</p><div class="threshold-row"><div class="field"><label for="comparison-input">Success means</label><select id="comparison-input" name="comparison"><option value="at_least">At least</option><option value="more_than">More than</option></select></div><div class="field"><label for="threshold-input">Threshold</label><input id="threshold-input" name="threshold" type="number" step="any" required inputmode="decimal" /></div><span id="threshold-unit" class="threshold-unit"></span></div><div class="form-actions"><button class="button button-dark" type="submit" id="approve-button">Approve this experiment <span aria-hidden="true">→</span></button><span class="approval-indicator" id="approval-indicator" role="status" aria-live="polite"></span></div></form>
+            <form id="approval-form" class="approval-form" novalidate><div class="approval-header"><div><p class="small-heading">03 / HUMAN CHECKPOINT</p><h3>Set the success bar.</h3></div><span class="human-badge">YOU DECIDE</span></div><p class="approval-copy">Lia suggested a threshold. Edit it if needed, then approve the experiment before entering results.</p><div class="threshold-row"><div class="field"><label for="comparison-input">Success means</label><select id="comparison-input" name="comparison"><option value="at_least">At least</option><option value="more_than">More than</option></select></div><div class="field"><label for="threshold-input">Threshold</label><input id="threshold-input" name="threshold" type="number" step="any" required inputmode="decimal" /></div><span id="threshold-unit" class="threshold-unit"></span></div><div class="form-actions"><button class="button button-dark" type="submit" id="approve-button">Approve this experiment <span aria-hidden="true">→</span></button><span class="approval-indicator" id="approval-indicator" role="status" aria-live="polite"></span></div></form>
           </section>
 
           <section class="panel" id="result-section" aria-labelledby="result-title" hidden>
             <div class="section-topline"><span class="section-index">04 / FOLLOW THE EVIDENCE</span><span class="section-state" id="result-state">AWAITING RESULT</span></div>
-            <div class="section-intro"><h2 id="result-title">What did the experiment show?</h2><p>For Atelier Loop, enter a clearly fictional result. For your own project, add measured evidence. AdaL should update its recommendation when a test misses the bar.</p></div>
-            <form id="review-form" novalidate><div class="result-fields"><div class="field"><label for="result-input">Measured result <span class="required">*</span></label><div class="value-field"><input id="result-input" name="result" type="number" step="any" required inputmode="decimal" /><span id="result-unit"></span></div><p class="field-help" id="result-metric-help"></p></div><div class="field"><label for="notes-input">What else did you observe?</label><textarea id="notes-input" name="notes" rows="3" placeholder="For example: buyers liked the concept, but delivery time varied by location."></textarea></div></div><div class="form-actions"><button class="button button-primary" type="submit" id="review-button">Reassess with AdaL <span aria-hidden="true">↗</span></button><span class="action-hint">Based on your approved bar</span></div><p class="form-status" id="review-status" role="status" aria-live="polite"></p></form>
+            <div class="section-intro"><h2 id="result-title">What did the experiment show?</h2><p>For Atelier Loop, enter a clearly fictional result. For your own project, add measured evidence. Lia should update its recommendation when a test misses the bar.</p></div>
+            <form id="review-form" novalidate><div class="result-fields"><div class="field"><label for="result-input">Measured result <span class="required">*</span></label><div class="value-field"><input id="result-input" name="result" type="number" step="any" required inputmode="decimal" /><span id="result-unit"></span></div><p class="field-help" id="result-metric-help"></p></div><div class="field"><label for="notes-input">What else did you observe?</label><textarea id="notes-input" name="notes" rows="3" placeholder="For example: buyers liked the concept, but delivery time varied by location."></textarea></div></div><div class="form-actions"><button class="button button-primary" type="submit" id="review-button">Reassess with Lia <span aria-hidden="true">↗</span></button><span class="action-hint">Based on your approved bar</span></div><p class="form-status" id="review-status" role="status" aria-live="polite"></p></form>
           </section>
 
-          <section class="panel review-panel" id="review-section" aria-labelledby="review-title" hidden><div class="section-topline"><span class="section-index">THE NEXT MOVE</span><span class="source-badge">REASSESSED WITH ADAL</span></div><div class="review-heading"><span class="outcome-icon" id="outcome-icon" aria-hidden="true"></span><div><span class="outcome-kicker" id="outcome-kicker"></span><h2 id="review-title"></h2></div></div><p class="result-comparison" id="result-comparison"></p><p class="review-rationale" id="review-rationale"></p><div class="next-steps"><h3>Next steps</h3><ol id="next-steps-list"></ol></div></section>
+          <section class="panel review-panel" id="review-section" aria-labelledby="review-title" hidden><div class="section-topline"><span class="section-index">THE NEXT MOVE</span><span class="source-badge">REASSESSED WITH CRUSOE</span></div><div class="review-heading"><span class="outcome-icon" id="outcome-icon" aria-hidden="true"></span><div><span class="outcome-kicker" id="outcome-kicker"></span><h2 id="review-title"></h2></div></div><p class="result-comparison" id="result-comparison"></p><p class="review-rationale" id="review-rationale"></p><div class="next-steps"><h3>Next steps</h3><ol id="next-steps-list"></ol></div></section>
 
           <section class="panel journal-panel" id="journal-section" aria-labelledby="journal-title"><div class="journal-header"><div><p class="section-index">YOUR LOCAL RECORD</p><h2 id="journal-title">Decision journal</h2></div><button class="button button-outline" type="button" id="export-button" disabled>Export Markdown <span aria-hidden="true">↗</span></button></div><p class="journal-intro">A short history of the AI's proposal and your decisions. It is saved only in this browser.</p><ol class="journal-list" id="journal-list"></ol><button class="text-button" type="button" id="reset-button">Start a fresh scenario</button><p class="storage-warning" id="storage-warning" role="status" aria-live="polite" hidden>Browser storage is unavailable. This draft will be lost when you close the page.</p></section>
         </div>

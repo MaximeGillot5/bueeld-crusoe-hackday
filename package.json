@@ -1,0 +1,15 @@
+{
+  "name": "bueeld-crusoe-hackday",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22.0.0 <23.0.0"
+  },
+  "scripts": {
+    "start": "node --env-file-if-exists=.env server.mjs",
+    "test": "npm run test:unit",
+    "test:unit": "node --test ai-provider.test.mjs maturity.test.mjs experiments.test.mjs quota.test.mjs growth-client.test.mjs",
+    "test:integration": "node hackday-api.integration.mjs"
+  }
+}

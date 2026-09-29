@@ -1,6 +1,8 @@
-# Per-tester OAuth setup for Bueeld Lab
+# Optional OAuth setup — BUEELD historical baseline
 
-The Sources UI supports separate read-only connections to Gmail, Google Drive, Google Calendar, and Notion. Each visitor first signs in to a Lab account, then authorizes their own provider account. Lab sign-in is kept for 30 days through an HttpOnly, SameSite=Lax cookie and a private authentication store, including across server restarts. Provider tokens stay only in server memory and expire within one hour for Google or two hours for Notion; the browser never receives them. Restarting the process clears those provider connections while preserving Lab sign-in. **Disconnect** clears the local token; a user can also revoke the upstream grant in the provider account settings.
+This guide originated with the 28 September prototype. OAuth connector code was copied into the 29 September Crusoe edition, but Google and Notion authorization has not been configured or verified for general visitors in this edition. Treat these steps as an optional future setup guide, not a claim that the connectors are live.
+
+The inherited Sources UI contains separate read-only connection paths for Gmail, Google Drive, Google Calendar, and Notion. If configured, each visitor signs in to a Lab account, then authorizes their own provider account. Lab sign-in is kept for 30 days through an HttpOnly, SameSite=Lax cookie and a private authentication store, including across server restarts. Provider tokens stay only in server memory and expire within one hour for Google or two hours for Notion; the browser never receives them. Restarting the process clears those provider connections while preserving Lab sign-in. **Disconnect** clears the local token; a user can also revoke the upstream grant in the provider account settings.
 
 ## Required server configuration
 
@@ -37,8 +39,8 @@ Do not register a changing Cloudflare Quick Tunnel hostname as a long-term OAuth
 
 ## Data flow and limits
 
-- **List** returns a limited set of recent names and metadata from the connected provider. **Analyze** retrieves only the one to four items the visitor selected, clips each text excerpt, and sends those excerpts to the existing `/api/sources/analyze` AdaL path. The raw provider payload is not persisted by this server.
-- Drive imports Google Docs as plain text, Sheets as CSV, uploaded text/Markdown/CSV/JSON, and PDFs up to 2 MB with selectable text. Selected Drive PDFs pass through the founder's browser for local text extraction; raw PDF bytes are not sent to AdaL or saved by the Lab server. Other Drive formats can be downloaded and attached through the local file picker. Notion reads up to 40 blocks of a selected page, including a bounded set of nested blocks. Calendar reads events from the primary calendar in a limited time window.
-- This in-memory OAuth store is suitable for a temporary, single-process demo. For a persistent production service, add authenticated user accounts, encrypted token storage, provider token refresh/revocation, and a stable HTTPS deployment.
+- **List** returns a limited set of recent names and metadata from the connected provider. **Analyze** retrieves only the one to four items the visitor selected, clips each text excerpt, and sends those excerpts to `/api/sources/analyze`, which now uses Crusoe server-side. The raw provider payload is not persisted by this server.
+- Drive imports Google Docs as plain text, Sheets as CSV, uploaded text/Markdown/CSV/JSON, and PDFs up to 2 MB with selectable text. Selected Drive PDFs pass through the founder's browser for local text extraction; raw PDF bytes are not sent to Crusoe or saved by the Lab server. Other Drive formats can be downloaded and attached through the local file picker. Notion reads up to 40 blocks of a selected page, including a bounded set of nested blocks. Calendar reads events from the primary calendar in a limited time window.
+- This in-memory OAuth token store is suitable only for a temporary, single-process demo. A persistent production connector would need protected token storage, refresh/revocation handling, and a stable HTTPS deployment.
 
 Provider references: [Google web-server OAuth](https://developers.google.com/identity/protocols/oauth2/web-server), [Notion public-connection authorization](https://developers.notion.com/guides/get-started/authorization).
