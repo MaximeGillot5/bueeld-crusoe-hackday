@@ -18,6 +18,25 @@ open PlaudTemplateApp.xcodeproj
 
 Dans Xcode, choisir une équipe de signature personnelle et un identifiant de bundle unique si nécessaire, brancher l'iPhone, sélectionner l'iPhone comme destination et lancer l'app. Le simulateur ne convient pas au SDK Plaud. Ce projet a été compilé pour iPhone avec Xcode 27 ; la cible iOS du starter a été portée à iOS 15, minimum accepté par ce Xcode. [Guide iOS officiel](https://docs.plaud.ai/plaud-embedded/ios-starter-app)
 
+### Variante de signature Bluetooth uniquement
+
+Si Xcode refuse les capacités **Hotspot Configuration** ou **Wi-Fi Info** pour l'équipe Apple disponible, générer le projet de démo Bluetooth :
+
+```sh
+cd ios
+python3 generate-ble-only.py
+open PlaudTemplateApp.xcodeproj
+```
+
+Cette commande retire ces deux droits du **projet Xcode généré**, régénère `Info.plist` sans les permissions Wi-Fi, cache le bouton *Fast Transfer* et bloque le démarrage du transfert Wi-Fi. La synchronisation Bluetooth normale, l'envoi vers Plaud et le pont BUEELD restent prévus. Elle ne modifie pas `project.yml`. Pour restaurer le projet et `Info.plist` complets :
+
+```sh
+cd ios
+xcodegen generate
+```
+
+Le Bluetooth peut être plus lent pour une longue prise de son. Cette variante requiert toujours une équipe de signature valide et un iPhone physique ; elle ne remplace pas ces prérequis. [Apple : droit Hotspot Configuration](https://developer.apple.com/documentation/bundleresources/entitlements/com.apple.developer.networking.hotspotconfiguration)
+
 ## Démo
 
 1. Ouvrir **BUEELD Capture** sur l'iPhone, saisir l'URL HTTPS du site BUEELD et le code de jumelage affiché par le site. Le code est sensible à la casse.

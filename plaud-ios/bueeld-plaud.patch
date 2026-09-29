@@ -1,11 +1,12 @@
 diff --git a/.gitignore b/.gitignore
-index fe4fca4..5ef4df4 100644
+index fe4fca4..95a1ea9 100644
 --- a/.gitignore
 +++ b/.gitignore
-@@ -21,6 +21,8 @@ ios/xcuserdata/
+@@ -21,6 +21,9 @@ ios/xcuserdata/
  **/*.xccheckout
  **/*.moved-aside
  ios/DerivedData/
++ios/.project.ble-only.generated.yml
 +DerivedData/
 +build.log
  ios/build/
@@ -13,10 +14,10 @@ index fe4fca4..5ef4df4 100644
  
 diff --git a/BUEELD-INTEGRATION.md b/BUEELD-INTEGRATION.md
 new file mode 100644
-index 0000000..7feafa9
+index 0000000..1e0abe1
 --- /dev/null
 +++ b/BUEELD-INTEGRATION.md
-@@ -0,0 +1,34 @@
+@@ -0,0 +1,53 @@
 +# Compagnon iPhone Plaud pour BUEELD
 +
 +Ce projet adapte le [starter iOS officiel Plaud](https://github.com/Plaud-AI/plaud-sdk-public) pour le relier au site BUEELD. Le site reste le produit principal ; cette app sert seulement à associer le NotePin S et à synchroniser son enregistrement.
@@ -36,6 +37,25 @@ index 0000000..7feafa9
 +```
 +
 +Dans Xcode, choisir une équipe de signature personnelle et un identifiant de bundle unique si nécessaire, brancher l'iPhone, sélectionner l'iPhone comme destination et lancer l'app. Le simulateur ne convient pas au SDK Plaud. Ce projet a été compilé pour iPhone avec Xcode 27 ; la cible iOS du starter a été portée à iOS 15, minimum accepté par ce Xcode. [Guide iOS officiel](https://docs.plaud.ai/plaud-embedded/ios-starter-app)
++
++### Variante de signature Bluetooth uniquement
++
++Si Xcode refuse les capacités **Hotspot Configuration** ou **Wi-Fi Info** pour l'équipe Apple disponible, générer le projet de démo Bluetooth :
++
++```sh
++cd ios
++python3 generate-ble-only.py
++open PlaudTemplateApp.xcodeproj
++```
++
++Cette commande retire ces deux droits du **projet Xcode généré**, régénère `Info.plist` sans les permissions Wi-Fi, cache le bouton *Fast Transfer* et bloque le démarrage du transfert Wi-Fi. La synchronisation Bluetooth normale, l'envoi vers Plaud et le pont BUEELD restent prévus. Elle ne modifie pas `project.yml`. Pour restaurer le projet et `Info.plist` complets :
++
++```sh
++cd ios
++xcodegen generate
++```
++
++Le Bluetooth peut être plus lent pour une longue prise de son. Cette variante requiert toujours une équipe de signature valide et un iPhone physique ; elle ne remplace pas ces prérequis. [Apple : droit Hotspot Configuration](https://developer.apple.com/documentation/bundleresources/entitlements/com.apple.developer.networking.hotspotconfiguration)
 +
 +## Démo
 +
@@ -555,6 +575,30 @@ index cfd784a..8125181 100644
  
  enum APIError: LocalizedError {
      case noData
+diff --git a/ios/PlaudTemplateApp/Managers/SyncManager.swift b/ios/PlaudTemplateApp/Managers/SyncManager.swift
+index 70cb4e8..481bee8 100644
+--- a/ios/PlaudTemplateApp/Managers/SyncManager.swift
++++ b/ios/PlaudTemplateApp/Managers/SyncManager.swift
+@@ -124,6 +124,11 @@ final class SyncManager: SyncManagerProtocol {
+ 
+ 
+     func startWiFiTransfer() {
++        #if BUEELD_BLE_ONLY
++        // This signing variant has no Hotspot Configuration or Wi-Fi Info
++        // entitlement. Keep every entry point on the normal BLE sync path.
++        stateSubject.send(.failed("Wi-Fi fast transfer is unavailable in this BLE-only build."))
++        #else
+         // Skip if already connecting or transferring via WiFi
+         if case .wifiConnecting = stateSubject.value { return }
+         if case .wifiTransferring = stateSubject.value { return }
+@@ -181,6 +186,7 @@ final class SyncManager: SyncManagerProtocol {
+         PlaudDeviceAgent.shared.setDeviceWiFi(open: true)
+         // Covers the device never opening its hotspot; re-armed once we get the creds.
+         armWiFiConnectWatchdog()
++        #endif
+     }
+ 
+     /// User-facing text for a denied location permission (WiFi fast transfer is unavailable).
 diff --git a/ios/PlaudTemplateApp/Managers/TranscriptionManager.swift b/ios/PlaudTemplateApp/Managers/TranscriptionManager.swift
 index a646eb8..31b9a3c 100644
 --- a/ios/PlaudTemplateApp/Managers/TranscriptionManager.swift
@@ -849,6 +893,50 @@ index fa76392..9f1f579 100644
      }
  }
 -
+diff --git a/ios/PlaudTemplateApp/UI/Home/HomeViewController.swift b/ios/PlaudTemplateApp/UI/Home/HomeViewController.swift
+index d3a6dca..9211e74 100644
+--- a/ios/PlaudTemplateApp/UI/Home/HomeViewController.swift
++++ b/ios/PlaudTemplateApp/UI/Home/HomeViewController.swift
+@@ -267,6 +267,9 @@ final class HomeViewController: UIViewController {
+     }
+ 
+     private func showFastTransferDialog() {
++        #if BUEELD_BLE_ONLY
++        return
++        #else
+         // Location access is required by NEHotspotConfiguration. Once denied, iOS never shows the
+         // system prompt again — offer a jump to Settings instead of failing silently.
+         if syncManager.isLocationPermissionDenied {
+@@ -280,6 +283,7 @@ final class HomeViewController: UIViewController {
+         }
+         let sheet = FastTransferSheetViewController(syncManager: syncManager)
+         present(sheet, animated: true)
++        #endif
+     }
+ 
+     private func presentLocationPermissionAlert() {
+@@ -878,6 +882,9 @@ final class SyncBannerView: UIView {
+         fastTransferPill.contentEdgeInsets = UIEdgeInsets(top: 4, left: 8, bottom: 4, right: 8)
+         fastTransferPill.translatesAutoresizingMaskIntoConstraints = false
+         fastTransferPill.addTarget(self, action: #selector(ftTapped), for: .touchUpInside)
++        #if BUEELD_BLE_ONLY
++        fastTransferPill.isHidden = true
++        #endif
+ 
+         [syncIcon, titleLabel, countLabel, progressTrack, speedLabel, fastTransferPill]
+             .forEach { addSubview($0) }
+@@ -941,7 +948,11 @@ final class SyncBannerView: UIView {
+             speedLabel.text = "Retrieving file list..."
+         }
+         titleLabel.text = isWiFi ? "Fast Transfer" : "Syncing recordings from device"
++        #if BUEELD_BLE_ONLY
++        fastTransferPill.isHidden = true
++        #else
+         fastTransferPill.isHidden = isWiFi
++        #endif
+     }
+ 
+     @objc private func ftTapped() { onFastTransferTapped?() }
 diff --git a/ios/PlaudTemplateApp/UI/Onboarding/WelcomeViewController.swift b/ios/PlaudTemplateApp/UI/Onboarding/WelcomeViewController.swift
 index d68f460..a0ec97f 100644
 --- a/ios/PlaudTemplateApp/UI/Onboarding/WelcomeViewController.swift
@@ -1193,6 +1281,62 @@ index 6c400bf..93c5cca 100644
      private func setupVersionCard() {
          versionCard.backgroundColor = .white
          versionCard.layer.cornerRadius = 12
+diff --git a/ios/generate-ble-only.py b/ios/generate-ble-only.py
+new file mode 100644
+index 0000000..a652d58
+--- /dev/null
++++ b/ios/generate-ble-only.py
+@@ -0,0 +1,50 @@
++#!/usr/bin/env python3
++"""Generate a BLE-only signing variant without changing the default project.yml.
++
++Run `xcodegen generate` in this directory to restore the full Wi-Fi-capable
++project. The generated Xcode project is ignored by Git in both cases.
++"""
++
++from pathlib import Path
++import subprocess
++
++
++ios_dir = Path(__file__).resolve().parent
++source = (ios_dir / "project.yml").read_text()
++
++entitlements = """    entitlements:
++      path: PlaudTemplateApp/PlaudTemplateApp.entitlements
++      properties:
++        com.apple.developer.networking.HotspotConfiguration: true
++        com.apple.developer.networking.wifi-info: true
++"""
++swift_version = '    SWIFT_VERSION: "5.0"\n'
++wifi_descriptions = """        NSLocalNetworkUsageDescription: Local network access is required for WiFi fast transfer.
++        NSLocationWhenInUseUsageDescription: Location access is required for WiFi fast transfer to identify and connect to your Plaud device hotspot.
++"""
++
++for label, fragment in (
++    ("Wi-Fi entitlements", entitlements),
++    ("Swift build settings", swift_version),
++    ("Wi-Fi permission descriptions", wifi_descriptions),
++):
++    if source.count(fragment) != 1:
++        raise SystemExit(f"project.yml changed: expected one {label} block")
++
++variant = source.replace(entitlements, "")
++variant = variant.replace(
++    swift_version,
++    swift_version + '    SWIFT_ACTIVE_COMPILATION_CONDITIONS: "$(inherited) BUEELD_BLE_ONLY"\n',
++)
++variant = variant.replace(wifi_descriptions, "")
++
++generated_spec = ios_dir / ".project.ble-only.generated.yml"
++try:
++    generated_spec.write_text(variant)
++    subprocess.run(
++        ["xcodegen", "generate", "--spec", generated_spec.name],
++        cwd=ios_dir,
++        check=True,
++    )
++finally:
++    generated_spec.unlink(missing_ok=True)
 diff --git a/ios/project.yml b/ios/project.yml
 index 60c67c1..49b64c3 100644
 --- a/ios/project.yml

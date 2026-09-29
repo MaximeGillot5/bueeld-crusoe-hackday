@@ -14,4 +14,6 @@ xcodegen generate
 open PlaudTemplateApp.xcodeproj
 ```
 
+For a BLE-only demo build that avoids Apple Hotspot Configuration and Wi-Fi Info entitlements, replace `xcodegen generate` above with `python3 generate-ble-only.py`. The patch adds this generator; the default build retains Plaud fast Wi-Fi transfer.
+
 See [BUEELD-INTEGRATION.md](BUEELD-INTEGRATION.md) for the portal, pairing, and device steps. Keep the Plaud Client Secret and API key on the BUEELD server. The iPhone app obtains its Plaud user token through pairing and contains no static Plaud credentials.
