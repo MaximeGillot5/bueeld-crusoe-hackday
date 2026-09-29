@@ -1335,6 +1335,11 @@ function discussSelectedSources() {
 // The conversation is separate from the optional, structured decision canvas.
 // Only completed exchanges are sent back to Lia as context; the backend stores no transcript.
 const CHAT_STORAGE_KEY = "bueeld-lab-chat-v2";
+const BAND_CHAT_MODE_KEY = "bueeld-band-chat-mode-v1";
+const BAND_CHAT_REPLIES_KEY = "bueeld-band-chat-replies-v1";
+const BAND_ACTIONS_KEY = "bueeld-band-actions-v1";
+const BAND_ACTION_CHAT_ID_KEY = "bueeld-band-action-chat-id-v1";
+const BAND_RELAY_PREFIX = "BAND → Lia: ";
 const MISSION_STORAGE_KEY = "bueeld-lab-pinned-mission-v1";
 const CHAT_LIMIT = 1500;
 const CHAT_REQUEST_BUDGET_BYTES = 28000;
@@ -1812,6 +1817,7 @@ async function ensureReadinessConversation(milestone) {
       const created = data.conversation;
       if (!created?.id) throw new Error("The mission chat could not be created.");
       activeConversationId = created.id;
+      setBandActionChatId(activeConversationId);
       persistActiveConversationId();
       $("account-chat-title").value = created.title;
       lastSavedSnapshot = JSON.stringify(conversationPayload());
@@ -2152,6 +2158,189 @@ function loadChatMessages(key = currentStorageKey(CHAT_STORAGE_KEY)) {
 }
 
 let chatMessages = [];
+let bandChatReplies = new Map();
+let bandChatInFlight = new Set();
+let bandChatQueue = Promise.resolve();
+let bandRequestQueue = Promise.resolve();
+let bandActions = [];
+let bandActionChatId = "";
+let bandActionInFlight = false;
+let bandActionOperationId = "";
+const bandChatModeMemory = new Map();
+
+function queuedBandApi(path, body) {
+  const work = bandRequestQueue.catch(() => {}).then(() => accountApi("POST", path, body));
+  bandRequestQueue = work.catch(() => {});
+  return work;
+}
+
+function getBandChatMode() {
+  if (!accountSession.authenticated) return false;
+  const key = currentStorageKey(BAND_CHAT_MODE_KEY);
+  if (bandChatModeMemory.has(key)) return bandChatModeMemory.get(key);
+  let enabled = false;
+  try { enabled = localStorage.getItem(key) === "1"; } catch { /* Browser storage may be unavailable. */ }
+  bandChatModeMemory.set(key, enabled);
+  return enabled;
+}
+
+function setBandChatMode(enabled) {
+  if (!accountSession.authenticated) return false;
+  const value = enabled === true;
+  const key = currentStorageKey(BAND_CHAT_MODE_KEY);
+  bandChatModeMemory.set(key, value);
+  try {
+    if (value) localStorage.setItem(key, "1");
+    else localStorage.removeItem(key);
+  } catch { /* Keep the choice for this visit. */ }
+  window.dispatchEvent(new CustomEvent("band:chat-mode-changed", { detail: { enabled: value } }));
+  return value;
+}
+
+function safeBandRoomUrl(value, roomId = "") {
+  try {
+    const url = new URL(value);
+    return url.protocol === "https:" && (url.hostname === "band.ai" || url.hostname.endsWith(".band.ai")) ? url.href : "";
+  } catch {
+    return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(roomId) ? `https://app.band.ai/sessions/${roomId}` : "";
+  }
+}
+
+function loadBandChatReplies() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(currentStorageKey(BAND_CHAT_REPLIES_KEY)) || "[]");
+    if (!Array.isArray(saved)) return new Map();
+    const rows = saved.filter((item) => item && typeof item.questionId === "string" &&
+      ["pending", "ready", "failed"].includes(item.status) && Number.isFinite(item.at) &&
+      typeof item.content === "string" && item.content.length <= 2500).slice(-100);
+    return new Map(rows.map((item) => [item.questionId, {
+      questionId: item.questionId,
+      liaMessageId: typeof item.liaMessageId === "string" ? item.liaMessageId : "",
+      afterMessageId: typeof item.afterMessageId === "string" ? item.afterMessageId : item.liaMessageId || "",
+      status: item.status === "pending" ? "failed" : item.status, at: item.at,
+      content: item.status === "pending" ? "This review stopped when the page reloaded. Retry it." : item.content,
+      delivery: ["queued", "published", "dismissed"].includes(item.delivery) ? item.delivery : "published",
+      selectedText: typeof item.selectedText === "string" ? item.selectedText.slice(0, 500) : "",
+      verdict: ["approve", "revise", "block"].includes(item.verdict) ? item.verdict : "",
+      roomUrl: safeBandRoomUrl(item.roomUrl),
+      suggestions: Array.isArray(item.suggestions) ? item.suggestions.filter((value) => typeof value === "string").slice(0, 3).map((value) => value.slice(0, 250)) : [],
+      questions: Array.isArray(item.questions) ? item.questions.filter((value) => typeof value === "string").slice(0, 4).map((value) => value.slice(0, 250)) : []
+    }]));
+  } catch { return new Map(); }
+}
+
+function persistBandChatReplies() {
+  const rows = [...bandChatReplies.values()].slice(-100);
+  try { localStorage.setItem(currentStorageKey(BAND_CHAT_REPLIES_KEY), JSON.stringify(rows)); }
+  catch { /* BAND replies remain visible for this visit. */ }
+}
+
+function cleanBandProposal(value) {
+  if (!value || typeof value !== "object") return null;
+  const short = (text, limit = 900) => typeof text === "string" ? text.trim().slice(0, limit) : "";
+  const list = (items) => Array.isArray(items) ? items.filter((item) => typeof item === "string" && item.trim()).slice(0, 4).map((item) => short(item, 280)) : [];
+  const proposal = {
+    name: short(value.name, 120), target: short(value.target, 350),
+    problem: short(value.problem), solution: short(value.solution),
+    firstExperiment: short(value.firstExperiment), risks: list(value.risks), assumptions: list(value.assumptions)
+  };
+  return proposal.name && proposal.target && proposal.problem && proposal.solution && proposal.firstExperiment ? proposal : null;
+}
+
+function loadBandActions() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(currentStorageKey(BAND_ACTIONS_KEY)) || "[]");
+    if (!Array.isArray(saved)) return [];
+    return saved.filter((item) => item && typeof item.id === "string" && typeof item.chatId === "string" &&
+      ["challenge", "create"].includes(item.kind) && Number.isFinite(item.at) &&
+      ["pending", "ready", "failed"].includes(item.status)).slice(-40).map((item) => ({
+      id: item.id, chatId: item.chatId, afterMessageId: typeof item.afterMessageId === "string" ? item.afterMessageId : "",
+      kind: item.kind, at: item.at, status: item.status === "pending" ? "failed" : item.status,
+      content: item.status === "pending" ? "This review stopped when the page reloaded. Retry it." : String(item.content || "").slice(0, 2500),
+      verdict: ["approve", "revise", "block"].includes(item.verdict) ? item.verdict : "",
+      questions: Array.isArray(item.questions) ? item.questions.filter((value) => typeof value === "string").slice(0, 4).map((value) => value.slice(0, 250)) : [],
+      proposal: cleanBandProposal(item.proposal), roomUrl: safeBandRoomUrl(item.roomUrl),
+      suggestions: Array.isArray(item.suggestions) ? item.suggestions.filter((value) => typeof value === "string").slice(0, 3).map((value) => value.slice(0, 250)) : [],
+      delivery: ["queued", "published", "dismissed"].includes(item.delivery) ? item.delivery : "published",
+      selectedText: typeof item.selectedText === "string" ? item.selectedText.slice(0, 500) : ""
+    }));
+  } catch { return []; }
+}
+
+function persistBandActions() {
+  try { localStorage.setItem(currentStorageKey(BAND_ACTIONS_KEY), JSON.stringify(bandActions.slice(-40))); }
+  catch { /* Keep current BAND messages visible for this visit. */ }
+}
+
+function setBandActionChatId(value = "") {
+  bandActionChatId = value || crypto.randomUUID();
+  try { localStorage.setItem(currentStorageKey(BAND_ACTION_CHAT_ID_KEY), bandActionChatId); }
+  catch { /* Keep the current chat identity in memory. */ }
+  window.dispatchEvent(new Event("band:notifications-changed"));
+}
+
+function restoreBandActionChatId() {
+  if (activeConversationId) { setBandActionChatId(activeConversationId); return; }
+  let saved = "";
+  try { saved = localStorage.getItem(currentStorageKey(BAND_ACTION_CHAT_ID_KEY)) || ""; } catch {}
+  setBandActionChatId(saved);
+}
+
+function visibleBandActions() {
+  return bandActions.filter((item) => item.chatId === bandActionChatId && item.delivery === "published").sort((a, b) => a.at - b.at);
+}
+
+function bandNotificationChoices(item) {
+  const proposal = item.proposal;
+  const blueprint = proposal ? [
+    `Name: ${proposal.name}`, `Who it serves: ${proposal.target}`, `Problem: ${proposal.problem}`,
+    `Solution: ${proposal.solution}`, `First test: ${proposal.firstExperiment}`,
+    ...(proposal.assumptions.length ? [`Assumptions: ${proposal.assumptions.join("; ")}`] : []),
+    ...(proposal.risks.length ? [`Risks: ${proposal.risks.join("; ")}`] : [])
+  ].join("\n") : item.content;
+  const primary = item.kind === "create"
+    ? { label: "Full proposal", text: blueprint }
+    : { label: item.kind === "chat" ? "Outside view" : "Main challenge", text: item.content };
+  const extras = (item.suggestions?.length ? item.suggestions : item.questions || [])
+    .filter((value) => typeof value === "string" && value.trim() && value.trim() !== primary.text)
+    .slice(0, 2).map((value, index) => ({ label: `Suggestion ${index + 1}`, text: value.trim().slice(0, 250) }));
+  return [primary, ...extras];
+}
+
+function bandNotifications() {
+  const messageIds = new Set(chatMessages.map((message) => message.id));
+  const actions = bandActions.filter((item) => item.chatId === bandActionChatId && item.delivery === "queued");
+  const replies = [...bandChatReplies.values()].filter((item) => item.delivery === "queued" && messageIds.has(item.questionId))
+    .map((item) => ({ ...item, id: item.questionId, kind: "chat" }));
+  return [...actions, ...replies].sort((a, b) => a.at - b.at).map((item) => ({
+    id: item.id, kind: item.kind, status: item.status, at: item.at,
+    title: item.kind === "create" ? item.proposal?.name || "Startup proposal"
+      : item.kind === "chat" ? "BAND reviewed Lia" : "BAND challenged the plan",
+    summary: item.content || "",
+    preview: item.kind === "create" && item.proposal
+      ? { target: item.proposal.target, solution: item.proposal.solution, firstExperiment: item.proposal.firstExperiment } : null,
+    choices: item.status === "ready" ? bandNotificationChoices(item) : [],
+    roomUrl: item.roomUrl || ""
+  }));
+}
+
+function bandNotificationItem(id) {
+  const action = bandActions.find((item) => item.id === id && item.chatId === bandActionChatId && item.delivery === "queued");
+  if (action) return { item: action, type: "action" };
+  const reply = bandChatReplies.get(id);
+  if (reply?.delivery === "queued" && chatMessages.some((message) => message.id === id)) return { item: reply, type: "reply" };
+  return null;
+}
+
+function dismissBandNotification(id) {
+  const found = bandNotificationItem(id);
+  if (!found) return false;
+  found.item.delivery = "dismissed";
+  if (found.type === "action") persistBandActions();
+  else persistBandChatReplies();
+  window.dispatchEvent(new Event("band:notifications-changed"));
+  return true;
+}
 
 function loadPinnedMission(key = currentStorageKey(MISSION_STORAGE_KEY)) {
   try {
@@ -3049,14 +3238,137 @@ function renderChatSuggestions(latestAssistant) {
   $("chat-suggestion-demo").disabled = chatBusy || sourceBusy || readinessGuideActive();
 }
 
+function renderBandAction(action) {
+  const row = el("li", `chat-message is-band is-action is-${action.kind} is-${action.status}`);
+  row.tabIndex = -1;
+  row.dataset.bandActionId = action.id;
+  const body = el("div", "message-body");
+  const line = el("div", "message-byline");
+  line.append(el("strong", "", "BAND"), el("span", "message-provider", action.kind === "create" ? "startup creator" : "outside challenger"));
+  const time = document.createElement("time");
+  time.dateTime = new Date(action.at).toISOString();
+  time.textContent = new Intl.DateTimeFormat("en", { hour: "numeric", minute: "2-digit" }).format(action.at);
+  line.append(time);
+  body.append(line);
+  if (action.status === "pending") {
+    body.append(el("h3", "band-action-title", action.kind === "create" ? "Building a startup proposal…" : "Challenging the current plan…"),
+      el("p", "message-content", "Scout and Critic are reviewing the current project and mission context."));
+  } else if (action.status === "failed") {
+    body.append(el("h3", "band-action-title", action.kind === "create" ? "Creation paused" : "Challenge paused"),
+      el("p", "message-content", action.content || "BAND could not complete this request."));
+    const retry = el("button", "band-chat-retry", "Retry BAND");
+    retry.type = "button";
+    retry.dataset.bandActionRetry = action.id;
+    retry.disabled = !accountSession.authenticated || bandActionInFlight;
+    body.append(retry);
+  } else {
+    const proposal = action.proposal;
+    body.append(el("h3", "band-action-title", action.kind === "create" ? proposal?.name || "Startup proposal" : "BAND's challenge"));
+    if (action.kind === "create" && proposal) {
+      const grid = el("div", "band-action-grid");
+      for (const [label, value] of [["Who it serves", proposal.target], ["Problem", proposal.problem],
+        ["Solution", proposal.solution], ["First experiment", proposal.firstExperiment]]) {
+        const section = el("div", "band-action-section");
+        section.append(el("h4", "", label), el("p", "", value));
+        grid.append(section);
+      }
+      body.append(grid);
+      for (const [label, values] of [["Assumptions to test", proposal.assumptions], ["Risks", proposal.risks]]) {
+        if (!values?.length) continue;
+        const section = el("div", "band-action-section");
+        const list = el("ul", "band-chat-questions");
+        list.append(...values.map((value) => el("li", "", value)));
+        section.append(el("h4", "", label), list);
+        body.append(section);
+      }
+    }
+    if (action.content) {
+      const section = el("div", "band-action-section");
+      section.append(el("h4", "", action.kind === "create" ? "Critic's view" : "Outside view"),
+        el("p", "", action.content));
+      body.append(section);
+    }
+    if (action.verdict) body.append(el("span", `band-chat-verdict is-${action.verdict}`,
+      { approve: "Proceed cautiously", revise: "Revise the plan", block: "Pause and investigate" }[action.verdict]));
+    if (action.questions?.length) {
+      const list = el("ul", "band-chat-questions");
+      list.append(...action.questions.map((value) => el("li", "", value)));
+      body.append(list);
+    }
+    const actions = el("div", "band-chat-actions");
+    if (action.roomUrl) {
+      const room = el("a", "", "View BAND room ↗");
+      room.href = action.roomUrl;
+      room.target = "_blank";
+      room.rel = "noopener noreferrer";
+      actions.append(room);
+    }
+    body.append(actions, el("p", "band-action-note", "Shared with Lia by you. This exchange does not change your project, missions, or score."));
+  }
+  row.append(body);
+  return row;
+}
+
+function renderBandChatReply(reply) {
+  const row = el("li", `chat-message is-band is-${reply.status}`);
+  const body = el("div", "message-body");
+  const line = el("div", "message-byline");
+  line.append(el("strong", "", "BAND"), el("span", "message-provider", "outside view"));
+  const time = document.createElement("time");
+  time.dateTime = new Date(reply.at).toISOString();
+  time.textContent = new Intl.DateTimeFormat("en", { hour: "numeric", minute: "2-digit" }).format(reply.at);
+  line.append(time);
+  body.append(line);
+  const content = el("p", "message-content", reply.status === "pending"
+    ? "Reviewing Lia's answer with an outside perspective…"
+    : reply.status === "failed" ? reply.content || "BAND could not respond to this turn." : reply.content);
+  body.append(content);
+  if (reply.status === "ready") {
+    if (reply.verdict) body.append(el("span", `band-chat-verdict is-${reply.verdict}`,
+      { approve: "Proceed cautiously", revise: "Revise the plan", block: "Pause and investigate" }[reply.verdict]));
+    if (reply.questions?.length) {
+      const list = el("ul", "band-chat-questions");
+      list.append(...reply.questions.map((value) => el("li", "", value)));
+      body.append(list);
+    }
+    const actions = el("div", "band-chat-actions");
+    if (reply.roomUrl) {
+      const room = el("a", "", "View BAND room ↗");
+      room.href = reply.roomUrl;
+      room.target = "_blank";
+      room.rel = "noopener noreferrer";
+      actions.append(room);
+    }
+    body.append(actions);
+  } else if (reply.status === "failed") {
+    const retry = el("button", "band-chat-retry", "Retry BAND");
+    retry.type = "button";
+    retry.dataset.bandRetry = reply.questionId;
+    retry.disabled = !accountSession.authenticated;
+    body.append(retry);
+  }
+  row.append(body);
+  return row;
+}
+
 function renderChat(scroll = false) {
   const list = $("chat-messages");
   const latestAssistant = [...chatMessages].reverse().find((item) => item.role === "assistant");
-  list.replaceChildren(...chatMessages.map((message) => {
-    const row = el("li", `chat-message is-${message.role}${message.status === "failed" ? " is-failed" : ""}`);
+  const bandActionsHere = visibleBandActions();
+  const messageIds = new Set(chatMessages.map((item) => item.id));
+  const publishedRepliesHere = [...bandChatReplies.values()].filter((item) => item.delivery === "published" && messageIds.has(item.questionId));
+  const sidecars = [
+    ...bandActionsHere.map((item) => ({ item, render: renderBandAction })),
+    ...publishedRepliesHere.map((item) => ({ item, render: renderBandChatReply }))
+  ];
+  const sidecarsAfter = (id) => sidecars.filter(({ item }) => item.afterMessageId === id)
+    .sort((a, b) => a.item.at - b.item.at).map(({ item, render }) => render(item));
+  const chatRows = chatMessages.flatMap((message) => {
+    const row = el("li", `chat-message is-${message.role}${message.status === "failed" ? " is-failed" : ""}${message.role === "user" && message.content.startsWith(BAND_RELAY_PREFIX) ? " is-band-relay" : ""}`);
     const body = el("div", "message-body");
     const line = el("div", "message-byline");
-    line.append(el("strong", "", message.role === "assistant" ? "Lia" : "You"));
+    line.append(el("strong", "", message.role === "assistant" ? "Lia" :
+      message.content.startsWith(BAND_RELAY_PREFIX) ? "BAND → Lia" : "You"));
     const time = document.createElement("time");
     time.dateTime = new Date(message.at).toISOString();
     time.textContent = new Intl.DateTimeFormat("en", { hour: "numeric", minute: "2-digit" }).format(message.at);
@@ -3066,7 +3378,8 @@ function renderChat(scroll = false) {
     }
     const content = el(message.role === "assistant" ? "div" : "p", "message-content");
     if (message.role === "assistant") appendAssistantMarkdown(content, message.content);
-    else content.textContent = message.content;
+    else content.textContent = message.content.startsWith(BAND_RELAY_PREFIX)
+      ? message.content.slice(BAND_RELAY_PREFIX.length) : message.content;
     body.append(line, content);
     if (message.role === "assistant") {
       const copy = el("button", "message-copy", "Copy response");
@@ -3091,10 +3404,13 @@ function renderChat(scroll = false) {
       body.append(saveResult);
     }
     row.append(body);
-    return row;
-  }));
+    return [row, ...sidecarsAfter(message.id)];
+  });
+  list.replaceChildren(...sidecarsAfter(""), ...chatRows,
+    ...sidecars.filter(({ item }) => item.afterMessageId && !messageIds.has(item.afterMessageId))
+      .sort((a, b) => a.item.at - b.item.at).map(({ item, render }) => render(item)));
   renderReadinessConversation(list);
-  $("chat-empty").hidden = chatMessages.length > 0 || onboarding.active || readinessGuideActive() || readinessCompletionVisible();
+  $("chat-empty").hidden = chatMessages.length > 0 || sidecars.length > 0 || onboarding.active || readinessGuideActive() || readinessCompletionVisible();
   $("create-account-welcome").hidden = accountSession.authenticated;
   $("guest-draft-choice").hidden = accountSession.authenticated || !guestHidden || !loadChatMessages(CHAT_STORAGE_KEY).length;
   renderOnboarding();
@@ -3103,8 +3419,8 @@ function renderChat(scroll = false) {
   $("chat-shortcuts").hidden = !!activeMissionRecord() || !chatMessages.some((message) => message.role === "assistant");
   const sampleDemo = chatMessages.some((message) => message.role === "user" && message.content.startsWith("Atelier Loop is a fictional circular-delivery startup.")) || sourceEntries.some((entry) => entry.selected && entry.sources.some((source) => source.sample));
   for (const button of $("chat-shortcuts").querySelectorAll("[data-demo-only]")) button.hidden = !sampleDemo;
-  $("export-chat").disabled = chatMessages.length === 0;
-  $("export-chat-help").textContent = chatMessages.length ? "Download this chat as Markdown" : "Available after your first message";
+  $("export-chat").disabled = chatMessages.length === 0 && sidecars.length === 0;
+  $("export-chat-help").textContent = chatMessages.length || sidecars.length ? "Download this chat as Markdown" : "Available after your first message";
   $("use-chat-context").disabled = !chatMessages.some((message) => message.role === "user" && message.status === "complete");
   const chatNavigationBusy = chatBusy || sourceBusy || readinessBusy || accountBusy || !accountReady;
   $("reset-chat").disabled = chatNavigationBusy;
@@ -3139,6 +3455,225 @@ function chatHistoryBefore(messageId) {
     .slice(-12).map(({ role, content }) => ({ role, content: content.slice(0, CHAT_LIMIT) }));
 }
 
+function capBandTurnText(value, maximum, label) {
+  const clean = String(value || "").trim();
+  const suffix = ` … [${label} shortened for BAND]`;
+  return clean.length > maximum ? clean.slice(0, maximum - suffix.length) + suffix : clean;
+}
+
+function bandChallengeQuestion(info) {
+  const mission = info?.context?.missions?.find((item) => item.kind === "project_milestone") || info?.context?.missions?.[0];
+  const latestLia = [...chatMessages].reverse().find((item) => item.role === "assistant");
+  const focus = mission?.title || mission?.description || info?.context?.project?.name || "this startup";
+  const opening = latestLia
+    ? `Challenge Lia's latest answer about “${String(focus).slice(0, 90)}”. Lia said: “${latestLia.content.slice(0, 170)}”.`
+    : `Challenge the current plan for “${String(focus).slice(0, 90)}”.`;
+  return capBandTurnText(`${opening} What assumption is weakest, what alternative deserves consideration, and what real evidence would change the decision?`, 500, "question");
+}
+
+function bandRelayPrompt(action, kind, choice, selectedIndex) {
+  const lead = BAND_RELAY_PREFIX + "Read-only exchange. Respond in the chat; do not change our project, missions, or score. ";
+  if (kind === "create" && action.proposal) {
+    const p = action.proposal;
+    const assumptions = p.assumptions.length ? ` Assumptions to test: ${p.assumptions.map((value) => value.replace(/[.!?]\s*$/, "")).join("; ")}.` : "";
+    const focus = selectedIndex > 0 ? `Focus on BAND's selected suggestion: ${choice.text}. ` : "";
+    return (lead + `${focus}Evaluate this draft, challenge its weakest assumption, and refine the first test. BAND proposes “${p.name}” for ${p.target}. Problem: ${p.problem} Solution: ${p.solution} First experiment: ${p.firstExperiment}${assumptions} BAND Critic's view: ${action.content}`).slice(0, CHAT_LIMIT);
+  }
+  return (lead + `Address BAND's selected point, state what you accept or dispute, and name the evidence that would change your mind. BAND's outside view: “${action.content}” Selected suggestion: ${choice.text}`).slice(0, CHAT_LIMIT);
+}
+
+function publishBandNotification(id, selectedIndex = 0) {
+  const found = bandNotificationItem(id);
+  if (!found || found.item.status !== "ready") return { ok: false, message: "This BAND suggestion is no longer available." };
+  if (!accountReady || !accountSession.authenticated || chatBusy || sourceBusy || accountBusy || readinessBusy || pendingAttachment) {
+    return { ok: false, message: "Finish the current Lia step or attachment first, then put this in the chat." };
+  }
+  if (isDemoQuotaExhausted()) return { ok: false, message: "The shared demo AI limit is reached. Your BAND suggestion is still here." };
+  const choices = bandNotificationChoices(found.item);
+  const choice = choices[selectedIndex];
+  if (!choice) return { ok: false, message: "Select a BAND suggestion first." };
+  const kind = found.type === "reply" ? "chat" : found.item.kind;
+  const prompt = bandRelayPrompt(found.item, kind, choice, selectedIndex);
+  if (readinessGuideActive()) pauseReadinessMission();
+  const previousAnchor = found.item.afterMessageId;
+  found.item.afterMessageId = chatMessages.at(-1)?.id || "";
+  found.item.delivery = "published";
+  found.item.selectedText = choice.text;
+  if (!submitChatMessage(prompt)) {
+    found.item.delivery = "queued";
+    found.item.afterMessageId = previousAnchor;
+    found.item.selectedText = "";
+    return { ok: false, message: "Lia could not start this exchange. Your BAND suggestion is still here." };
+  }
+  if (found.type === "action") persistBandActions();
+  else persistBandChatReplies();
+  history.replaceState(null, "", "#lia");
+  window.BUILDHome?.selectView("lia");
+  renderChat(true);
+  window.dispatchEvent(new Event("band:notifications-changed"));
+  return { ok: true };
+}
+
+function requestBandAction(kind, retryId = "") {
+  if (!accountSession.authenticated || !["challenge", "create"].includes(kind) || bandActionInFlight) return false;
+  const info = window.BUEELDBand?.getContext?.();
+  if (!info?.authenticated) return false;
+  const existing = retryId ? bandActions.find((item) => item.id === retryId && item.chatId === bandActionChatId && item.kind === kind) : null;
+  if (retryId && !existing) return false;
+  const action = existing || {
+    id: crypto.randomUUID(), chatId: bandActionChatId, afterMessageId: chatMessages.at(-1)?.id || "",
+    kind, at: Date.now(), status: "pending", content: "", questions: [], suggestions: [], proposal: null, delivery: "queued"
+  };
+  action.status = "pending";
+  action.content = "";
+  action.proposal = null;
+  action.questions = [];
+  action.suggestions = [];
+  action.verdict = "";
+  action.roomUrl = "";
+  action.delivery = "queued";
+  if (!existing) bandActions.push(action);
+  persistBandActions();
+  const payload = { context: window.BUEELDBand.requestContext(info.context) };
+  if (info.missionId) payload.missionId = info.missionId;
+  if (kind === "challenge") payload.question = bandChallengeQuestion(info);
+  const userId = accountSession.user?.id;
+  const generation = workspaceGeneration;
+  const operationId = crypto.randomUUID();
+  bandActionOperationId = operationId;
+  bandActionInFlight = true;
+  window.dispatchEvent(new Event("band:action-state"));
+  window.dispatchEvent(new Event("band:notifications-changed"));
+  void (async () => {
+    const sameAccount = () => userId === accountSession.user?.id && generation === workspaceGeneration;
+    try {
+      const result = kind === "create" ? await window.BUEELDBand.create(payload) : await window.BUEELDBand.advice(payload);
+      if (!sameAccount()) return;
+      const summary = result?.advice?.summary;
+      const proposal = kind === "create" ? cleanBandProposal(result?.proposal) : null;
+      if (typeof summary !== "string" || !summary.trim() || (kind === "create" && !proposal)) throw new Error("BAND returned an incomplete response.");
+      action.status = "ready";
+      action.content = summary.trim().slice(0, 2500);
+      action.proposal = proposal;
+      action.verdict = ["approve", "revise", "block"].includes(result.advice.verdict) ? result.advice.verdict : "";
+      action.questions = Array.isArray(result.advice.questions)
+        ? result.advice.questions.filter((value) => typeof value === "string").slice(0, 4).map((value) => value.slice(0, 250)) : [];
+      action.suggestions = Array.isArray(result.suggestions)
+        ? result.suggestions.filter((value) => typeof value === "string" && value.trim()).slice(0, 3).map((value) => value.trim().slice(0, 250)) : [];
+      action.roomUrl = safeBandRoomUrl(result.roomUrl, result.roomId);
+      persistBandActions();
+      window.dispatchEvent(new Event("band:notifications-changed"));
+    } catch (error) {
+      if (!sameAccount()) return;
+      action.status = "failed";
+      action.content = error?.message || "BAND could not complete this request.";
+      persistBandActions();
+      window.dispatchEvent(new Event("band:notifications-changed"));
+    } finally {
+      if (bandActionOperationId === operationId) {
+        bandActionInFlight = false;
+        window.dispatchEvent(new Event("band:action-state"));
+        window.dispatchEvent(new Event("band:notifications-changed"));
+      }
+    }
+  })();
+  return true;
+}
+
+function requestBandChatReply(questionMessage, liaMessage, explicitRetry = false) {
+  if (!accountSession.authenticated || (!explicitRetry && !getBandChatMode()) ||
+      bandChatInFlight.has(questionMessage.id) || bandChatReplies.get(questionMessage.id)?.status === "ready") return;
+  const userId = accountSession.user?.id;
+  const generation = workspaceGeneration;
+  const info = window.BUEELDBand?.getContext?.();
+  const payload = {
+    questionId: questionMessage.id,
+    question: capBandTurnText(questionMessage.content, 500, "question"),
+    liaReply: capBandTurnText(liaMessage.content, 2000, "Lia reply"),
+    context: window.BUEELDBand?.requestContext?.(info?.context) || {}
+  };
+  if (activeConversationId) payload.conversationId = activeConversationId;
+  if (info?.missionId) payload.missionId = info.missionId;
+  bandChatInFlight.add(questionMessage.id);
+  bandChatReplies.delete(questionMessage.id);
+  bandChatReplies.set(questionMessage.id, { questionId: questionMessage.id, liaMessageId: liaMessage.id,
+    afterMessageId: liaMessage.id, status: "pending", delivery: "queued", at: Date.now(), content: "", questions: [], suggestions: [] });
+  persistBandChatReplies();
+  window.dispatchEvent(new Event("band:notifications-changed"));
+  const work = bandChatQueue.catch(() => {}).then(async () => {
+    const sameAccount = () => userId === accountSession.user?.id && generation === workspaceGeneration;
+    if (!sameAccount()) return;
+    if (!explicitRetry && !getBandChatMode()) {
+      bandChatReplies.delete(questionMessage.id);
+      persistBandChatReplies();
+      window.dispatchEvent(new Event("band:notifications-changed"));
+      return;
+    }
+    try {
+      const result = await window.BUEELDBand.chatReply(payload);
+      if (!sameAccount()) return;
+      if (typeof result?.advice?.summary !== "string" || !result.advice.summary.trim()) throw new Error("BAND returned an incomplete reply.");
+      bandChatReplies.set(questionMessage.id, {
+        questionId: questionMessage.id, liaMessageId: liaMessage.id, afterMessageId: liaMessage.id,
+        status: "ready", delivery: "queued", at: Date.now(),
+        content: result.advice.summary.trim().slice(0, 2500),
+        verdict: ["approve", "revise", "block"].includes(result.advice.verdict) ? result.advice.verdict : "",
+        roomUrl: safeBandRoomUrl(result.roomUrl, result.roomId),
+        suggestions: Array.isArray(result.suggestions) ? result.suggestions.filter((item) => typeof item === "string" && item.trim()).slice(0, 3).map((item) => item.trim().slice(0, 250)) : [],
+        questions: Array.isArray(result.advice.questions) ? result.advice.questions.filter((item) => typeof item === "string").slice(0, 4).map((item) => item.slice(0, 250)) : []
+      });
+      persistBandChatReplies();
+      window.dispatchEvent(new Event("band:notifications-changed"));
+    } catch (error) {
+      if (!sameAccount()) return;
+      bandChatReplies.set(questionMessage.id, { questionId: questionMessage.id, liaMessageId: liaMessage.id,
+        afterMessageId: liaMessage.id, status: "failed", delivery: "queued", at: Date.now(),
+        content: error?.message || "BAND could not respond to this turn.", questions: [], suggestions: [] });
+      persistBandChatReplies();
+      window.dispatchEvent(new Event("band:notifications-changed"));
+    }
+  }).finally(() => { bandChatInFlight.delete(questionMessage.id); });
+  bandChatQueue = work.catch(() => {});
+}
+
+function bandChatLiaReply(questionId) {
+  const index = chatMessages.findIndex((item) => item.role === "user" && item.id === questionId);
+  if (index < 0) return null;
+  const replyId = bandChatReplies.get(questionId)?.liaMessageId;
+  for (const message of chatMessages.slice(index + 1)) {
+    if (message.role === "user") break;
+    if (message.role === "assistant" && (!replyId || message.id === replyId)) return message;
+  }
+  return null;
+}
+
+function handleBandChatAction(event) {
+  const actionRetry = event.target.closest("button[data-band-action-retry]");
+  if (actionRetry) {
+    const action = bandActions.find((item) => item.id === actionRetry.dataset.bandActionRetry && item.chatId === bandActionChatId);
+    if (action?.status === "failed") requestBandAction(action.kind, action.id);
+    return;
+  }
+  const retry = event.target.closest("button[data-band-retry]");
+  if (retry) {
+    const questionMessage = chatMessages.find((item) => item.role === "user" && item.id === retry.dataset.bandRetry);
+    const liaMessage = questionMessage && bandChatLiaReply(questionMessage.id);
+    if (questionMessage && liaMessage) requestBandChatReply(questionMessage, liaMessage, true);
+    return;
+  }
+}
+
+function retryBandNotification(id) {
+  const found = bandNotificationItem(id);
+  if (!found || found.item.status !== "failed") return false;
+  if (found.type === "action") return requestBandAction(found.item.kind, id);
+  const question = chatMessages.find((item) => item.role === "user" && item.id === id);
+  const liaReply = question && bandChatLiaReply(id);
+  if (!question || !liaReply) return false;
+  requestBandChatReply(question, liaReply, true);
+  return true;
+}
+
 async function requestChatReply(message) {
   expandedMissionId = null;
   chatBusy = true;
@@ -3146,6 +3681,7 @@ async function requestChatReply(message) {
   setChatStatus("");
   persistChat();
   renderChat(true);
+  let liaReply = null;
   try {
     const body = { message: message.content, history: chatHistoryBefore(message.id) };
     if (typeof memoryHasContent === "function" && memoryHasContent()) body.projectMemory = cleanProjectMemory(projectMemory);
@@ -3162,10 +3698,11 @@ async function requestChatReply(message) {
       throw new Error("Lia returned an empty reply. Please retry.");
     }
     message.status = "complete";
-    chatMessages.push({
+    liaReply = {
       id: crypto.randomUUID(), role: "assistant", content: data.message.trim(),
       at: Date.now(), status: "complete", provider: data.source
-    });
+    };
+    chatMessages.push(liaReply);
     chatMessages = chatMessages.slice(-60);
     persistChat();
   } catch (error) {
@@ -3177,6 +3714,7 @@ async function requestChatReply(message) {
     renderChat(true);
     scheduleConversationAutosave();
     $("chat-input").focus();
+    if (liaReply && !message.content.startsWith(BAND_RELAY_PREFIX)) requestBandChatReply(message, liaReply);
   }
 }
 
@@ -3292,15 +3830,46 @@ function unpinMission() {
 }
 
 function exportChat() {
-  if (!chatMessages.length) return;
+  const actionRows = visibleBandActions();
+  const messageIds = new Set(chatMessages.map((item) => item.id));
+  const publishedReplies = [...bandChatReplies.values()].filter((item) => item.delivery === "published" && messageIds.has(item.questionId));
+  if (!chatMessages.length && !actionRows.length && !publishedReplies.length) return;
   const lines = [
     "# Bueeld Lab conversation", "",
     "_AI Co-Founder Hackathon prototype. Conversation processed by Lia when messages were sent. Any Atelier Loop example is fictional._", ""
   ];
+  const appendAction = (action) => {
+    lines.push(`## BAND ${action.kind === "create" ? "startup proposal" : "challenge"} · ${new Date(action.at).toLocaleString()}`, "");
+    if (action.proposal) {
+      for (const [label, value] of [["Name", action.proposal.name], ["Target", action.proposal.target],
+        ["Problem", action.proposal.problem], ["Solution", action.proposal.solution],
+        ["First experiment", action.proposal.firstExperiment]]) lines.push(`**${label}:** ${value}`, "");
+      if (action.proposal.assumptions.length) lines.push(`**Assumptions:** ${action.proposal.assumptions.join("; ")}`, "");
+      if (action.proposal.risks.length) lines.push(`**Risks:** ${action.proposal.risks.join("; ")}`, "");
+    }
+    lines.push(action.content || "BAND review in progress.", "");
+    if (action.selectedText) lines.push(`Selected for Lia: ${action.selectedText}`, "");
+    if (action.roomUrl) lines.push(`Band room: ${action.roomUrl}`, "");
+  };
+  const appendReply = (reply) => {
+    lines.push(`## BAND · ${new Date(reply.at).toLocaleString()}`, "", reply.content, "");
+    if (reply.selectedText) lines.push(`Selected for Lia: ${reply.selectedText}`, "");
+    if (reply.roomUrl) lines.push(`Band room: ${reply.roomUrl}`, "");
+  };
+  const sidecars = [
+    ...actionRows.map((item) => ({ item, append: appendAction })),
+    ...publishedReplies.map((item) => ({ item, append: appendReply }))
+  ];
+  const appendAfter = (id) => sidecars.filter(({ item }) => item.afterMessageId === id)
+    .sort((a, b) => a.item.at - b.item.at).forEach(({ item, append }) => append(item));
+  appendAfter("");
   for (const message of chatMessages) {
-    lines.push(`## ${message.role === "assistant" ? "Lia" : "Founder"} · ${new Date(message.at).toLocaleString()}`, "", message.content, "");
+    lines.push(`## ${message.role === "assistant" ? "Lia" : message.content.startsWith(BAND_RELAY_PREFIX) ? "BAND → Lia" : "Founder"} · ${new Date(message.at).toLocaleString()}`, "", message.content, "");
     if (message.status === "failed") lines.push("_This message did not receive an Lia reply._", "");
+    appendAfter(message.id);
   }
+  sidecars.filter(({ item }) => item.afterMessageId && !messageIds.has(item.afterMessageId))
+    .sort((a, b) => a.item.at - b.item.at).forEach(({ item, append }) => append(item));
   if (pinnedMission) lines.push("## Pinned next mission", "", `Status: ${pinnedMission.status} (local human decision only)`, "", pinnedMission.content, "");
   const blob = new Blob([lines.join("\n")], { type: "text/markdown;charset=utf-8" });
   const url = URL.createObjectURL(blob);
@@ -3364,6 +3933,7 @@ async function resetChat() {
   $("chat-input").value = "";
   activeConversationId = created?.id || null;
   activateReadinessForChat(activeConversationId);
+  setBandActionChatId(activeConversationId);
   guestMigrationNeedsSave = false;
   persistActiveConversationId();
   renderSourceResults();
@@ -3498,7 +4068,13 @@ async function writeConversation(manual) {
   try {
     const data = await conversationSavePromise;
     if (accountSession.user?.id !== userId) return false;
+    const previousBandChatId = bandActionChatId;
     activeConversationId = data.conversation.id;
+    if (previousBandChatId !== activeConversationId) {
+      for (const action of bandActions) if (action.chatId === previousBandChatId) action.chatId = activeConversationId;
+      setBandActionChatId(activeConversationId);
+      persistBandActions();
+    }
     lastSavedSnapshot = snapshot;
     guestMigrationNeedsSave = false;
     persistActiveConversationId();
@@ -3571,8 +4147,10 @@ function accountMessage(message, isError = false) {
 }
 
 function conversationTitle() {
-  const first = chatMessages.find((item) => item.role === "user");
-  const text = first?.content.replace(/\s+/g, " ").trim() || "New Bueeld conversation";
+  const first = chatMessages.find((item) => item.role === "user" && !item.content.startsWith(BAND_RELAY_PREFIX));
+  const bandAction = first ? null : visibleBandActions()[0];
+  const text = first?.content.replace(/\s+/g, " ").trim() ||
+    (bandAction?.kind === "create" ? "BAND startup proposal" : bandAction ? "BAND challenge" : "New Bueeld conversation");
   return text.length > 72 ? text.slice(0, 69).trimEnd() + "…" : text;
 }
 
@@ -3728,6 +4306,11 @@ function loadAccountWorkspace() {
   $("notes-input").value = state.result.notes;
   render();
   chatMessages = !accountSession.authenticated && guestHidden ? [] : loadChatMessages();
+  bandChatReplies = loadBandChatReplies();
+  bandChatInFlight.clear();
+  bandActions = accountSession.authenticated ? loadBandActions() : [];
+  bandActionInFlight = false;
+  bandActionOperationId = "";
   pinnedMission = !accountSession.authenticated && guestHidden ? null : loadPinnedMission();
   pinCandidate = null;
   missionTracker = !accountSession.authenticated && guestHidden ? { records: [], seenLevel: 1 } : loadMissionTracker();
@@ -3736,6 +4319,7 @@ function loadAccountWorkspace() {
   expandedMissionId = null;
   recentMissionCompletionId = null;
   missionDirty = false;
+  restoreBandActionChatId();
   $("account-chat-title").value = conversationTitle();
   reconcilePinnedMission();
   renderMissionTracker();
@@ -3745,6 +4329,7 @@ function loadAccountWorkspace() {
   updateSaveIndicator();
   if (typeof loadProjectMemory === "function") void loadProjectMemory();
   window.dispatchEvent(new Event("build:workspace-changed"));
+  window.dispatchEvent(new Event("band:notifications-changed"));
 }
 
 async function loadServerMissionTracker() {
@@ -3778,8 +4363,9 @@ async function loadServerMissionTracker() {
 function clearAuthenticatedLocalDrafts(userId) {
   if (!userId) return;
   const suffix = `-user-${String(userId).replace(/[^A-Za-z0-9_-]/g, "")}`;
-  for (const base of [STORAGE_KEY, CHAT_STORAGE_KEY, MISSION_STORAGE_KEY, MISSION_TRACKER_STORAGE_KEY, ACTIVE_CONVERSATION_KEY, READINESS_GUIDE_KEY, READINESS_PAUSED_KEY, READINESS_LAST_KEY, READINESS_CHAT_KEY, READINESS_CHATS_KEY, READINESS_TURNS_KEY, ...(typeof PROJECT_MEMORY_KEY === "string" ? [PROJECT_MEMORY_KEY] : [])]) {
+  for (const base of [STORAGE_KEY, CHAT_STORAGE_KEY, BAND_CHAT_MODE_KEY, BAND_CHAT_REPLIES_KEY, BAND_ACTIONS_KEY, BAND_ACTION_CHAT_ID_KEY, MISSION_STORAGE_KEY, MISSION_TRACKER_STORAGE_KEY, ACTIVE_CONVERSATION_KEY, READINESS_GUIDE_KEY, READINESS_PAUSED_KEY, READINESS_LAST_KEY, READINESS_CHAT_KEY, READINESS_CHATS_KEY, READINESS_TURNS_KEY, ...(typeof PROJECT_MEMORY_KEY === "string" ? [PROJECT_MEMORY_KEY] : [])]) {
     try { localStorage.removeItem(base + suffix); } catch { /* Browser storage may be unavailable. */ }
+    if (base === BAND_CHAT_MODE_KEY) bandChatModeMemory.delete(base + suffix);
   }
 }
 
@@ -3813,6 +4399,7 @@ function selectRecentConversationIfNeeded() {
   if (!accountSession.authenticated || activeConversationId || chatMessages.length || !accountConversations.length) return;
   activeConversationId = accountConversations[0].id;
   activateReadinessForChat(activeConversationId);
+  setBandActionChatId(activeConversationId);
   persistActiveConversationId();
 }
 
@@ -4006,6 +4593,7 @@ function copyGuestChat() {
   pinnedMission = loadPinnedMission(MISSION_STORAGE_KEY);
   sourceEntries = guestContextSnapshot.map((context) => entryFromSavedContext(context));
   activeConversationId = null;
+  setBandActionChatId();
   persistActiveConversationId();
   guestMigrationNeedsSave = true;
   clearTimeout(missionSyncTimer);
@@ -4085,6 +4673,7 @@ async function openSavedConversation(id) {
     $("chat-input").value = "";
     activeConversationId = conversation.id;
     activateReadinessForChat(activeConversationId);
+    setBandActionChatId(conversation.id);
     persistActiveConversationId();
     if (readinessGuideActive()) {
       $("chat-input").value = readinessComposerDrafts.get(readinessMissionId) || "";
@@ -4125,8 +4714,12 @@ async function deleteSavedConversation(id) {
     if (conversationSavePromise) await conversationSavePromise;
     await accountApi("DELETE", `/api/conversations/${encodeURIComponent(id)}`);
     detachReadinessConversation(id);
+    bandActions = bandActions.filter((item) => item.chatId !== id);
+    persistBandActions();
     if (isCurrent) {
       autosaveMuted = true;
+      for (const message of chatMessages) if (message.role === "user") bandChatReplies.delete(message.id);
+      persistBandChatReplies();
       chatMessages = [];
       pinnedMission = null;
       sourceEntries = [];
@@ -4136,6 +4729,7 @@ async function deleteSavedConversation(id) {
       $("chat-input").value = "";
       $("account-chat-title").value = "";
       activeConversationId = null;
+      setBandActionChatId();
       lastSavedSnapshot = null;
       persistActiveConversationId();
       persistChat();
@@ -4399,6 +4993,7 @@ $("chat-input").addEventListener("keydown", (event) => {
   }
 });
 $("chat-messages").addEventListener("click", retryChat);
+$("chat-messages").addEventListener("click", handleBandChatAction);
 $("chat-messages").addEventListener("click", activatePinCandidate);
 $("chat-messages").addEventListener("input", handlePinCandidate);
 $("chat-messages").addEventListener("click", (event) => {
@@ -4507,6 +5102,85 @@ $("header-more").addEventListener("focusout", (event) => {
 });
 document.addEventListener("pointerdown", (event) => {
   if ($("header-more").open && !$("header-more").contains(event.target)) closeHeaderMore();
+});
+// BAND context is read only. Opening the panel or enabling chat replies are the
+// founder's explicit choices to send a bounded copy to the outside agents.
+window.BUEELDBand = Object.freeze({
+  getContext() {
+    const short = (value, limit = 200) => typeof value === "string" ? value.trim().slice(0, limit) : "";
+    const project = readinessSnapshot?.project || {};
+    const memory = typeof projectMemory === "object" && projectMemory ? projectMemory : {};
+    const missions = [];
+    const seen = new Set();
+    const addMilestone = (milestone, state) => {
+      if (!milestone) return;
+      const id = short(milestone.milestoneId || milestone.id, 64);
+      if (!id || seen.has(id)) return;
+      seen.add(id);
+      missions.push({
+        kind: "project_milestone", id,
+        title: short(milestone.title, 90),
+        description: short(milestone.description || milestone.summary, 240),
+        criterion: short(milestone.criterion || milestone.successCriterion || milestone.evidenceRequired, 180),
+        status: state,
+        founderAnswers: Array.isArray(milestone.draft?.answers)
+          ? milestone.draft.answers.filter((answer) => typeof answer === "string" && answer.trim()).slice(0, 2).map((answer) => short(answer, 100)) : []
+      });
+    };
+    if (!$("build-mission-details").hidden) addMilestone(window.BUILDHome?.current?.(), "selected");
+    if (readinessMissionId && missions.length < 3) addMilestone(readinessMilestone(), "in_progress");
+    for (const milestone of readinessSnapshot?.maturity?.milestones || []) {
+      if (missions.length >= 3) break;
+      if (!milestone.validated && (milestone.draft?.answeredCount > 0 || milestone.draft?.answers?.some((answer) => typeof answer === "string" && answer.trim()))) addMilestone(milestone, "in_progress");
+    }
+    if (missions.length < 3) addMilestone(readinessSnapshot?.nextMission || window.BUILDHome?.current?.(), "next");
+    const pinned = activeMissionRecord();
+    if (pinned) missions.push({
+      kind: "lia_pinned", id: short(pinned.id, 64), title: "Lia mission",
+      description: short(pinned.content, 260), status: pinned.status,
+      founderEvidence: short(pinned.evidence, 160)
+    });
+    return {
+      authenticated: accountSession.authenticated === true,
+      missionId: missions.find((mission) => mission.kind === "project_milestone")?.id || "",
+      context: {
+        project: {
+          name: short(project.name || project.title || memory.project, 80),
+          summary: short(project.summary || project.description, 240),
+          target: short(memory.target, 120), goal: short(memory.goal, 120), blocker: short(memory.blocker, 120)
+        },
+        missions: missions.slice(0, 4),
+        recentConversation: chatMessages.filter((message) => ["user", "assistant"].includes(message?.role) && typeof message.content === "string")
+          .slice(-4).map((message) => ({ role: message.role, text: short(message.content, 130) }))
+      }
+    };
+  },
+  requestContext(source) {
+    const short = (value, limit) => typeof value === "string" ? value.trim().slice(0, limit) : "";
+    const missions = Array.isArray(source?.missions) ? source.missions : [];
+    return {
+      missions: missions.slice(0, 4).map((item) => item.kind === "lia_pinned"
+        ? { kind: "lia_pinned", id: short(item.id, 64), description: short(item.description, 260),
+          status: item.status, founderEvidence: short(item.founderEvidence, 160) }
+        : { kind: "project_milestone", id: short(item.id, 64) }),
+      recentConversation: Array.isArray(source?.recentConversation) ? source.recentConversation.slice(-4).map((item) => ({
+        role: item.role === "assistant" ? "assistant" : "user", text: short(item.text, 130)
+      })).filter((item) => item.text) : []
+    };
+  },
+  getChatMode: getBandChatMode,
+  setChatMode: setBandChatMode,
+  isActionBusy() { return bandActionInFlight; },
+  runAction(kind) { return requestBandAction(kind); },
+  notifications: bandNotifications,
+  publishNotification: publishBandNotification,
+  dismissNotification: dismissBandNotification,
+  retryNotification: retryBandNotification,
+  publishNeedsMissionPause() { return readinessGuideActive(); },
+  status() { return accountApi("GET", "/api/band/status"); },
+  advice(body) { return queuedBandApi("/api/band/advice", body); },
+  create(body) { return queuedBandApi("/api/band/create", body); },
+  chatReply(body) { return queuedBandApi("/api/band/chat-reply", body); }
 });
 if (typeof initGrowthFeatures === "function") initGrowthFeatures();
 if (typeof initDemoTour === "function") initDemoTour();

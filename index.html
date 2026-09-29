@@ -10,12 +10,14 @@
     <link rel="stylesheet" href="./progress.css" />
     <link rel="stylesheet" href="./build-home.css" />
     <link rel="stylesheet" href="./build-workbench.css" />
+    <link rel="stylesheet" href="./band-panel.css" />
     <script src="./demo-tour.js" defer></script>
     <script src="./lab-growth.js" defer></script>
     <script src="./app.js" defer></script>
     <script src="./progress-panel.js" defer></script>
     <script src="./build-home.js" defer></script>
     <script src="./build-experiments.js" defer></script>
+    <script src="./band-panel.js" defer></script>
   </head>
   <body>
     <a class="skip-link" href="#main">Skip to main content</a>
@@ -160,7 +162,7 @@
             <button type="button" id="open-sources">Sources</button>
           </div>
         </div>
-        <div class="chat-transcript" id="chat-transcript" role="log" aria-label="Conversation with Lia" aria-live="polite" aria-relevant="additions text">
+        <div class="chat-transcript" id="chat-transcript" role="log" aria-label="Conversation with Lia and optional BAND reviews" aria-live="polite" aria-relevant="additions text">
           <div class="chat-empty" id="chat-empty">
             <h2>How can I help you build?</h2>
             <p>Lia is your AI co-founder. Talk through an idea, challenge a decision, or bring back new evidence one message at a time.</p>
@@ -527,6 +529,28 @@
 
         </div>
       </section>
+    </div>
+    <div class="band-widget" id="band-widget">
+      <div class="band-notice" id="band-notice" role="region" aria-label="BAND suggestion" tabindex="-1" hidden>
+        <div class="band-notice-head"><span class="band-menu-kicker">BAND · OUTSIDE AGENT</span><span id="band-notice-position" class="band-notice-position"></span><button type="button" class="band-notice-close" id="band-notice-close" aria-label="Close BAND suggestion">×</button></div>
+        <div id="band-notice-body" class="band-notice-body" aria-live="polite"></div>
+        <div id="band-notice-choices" class="band-notice-choices" role="group" aria-label="Choose what BAND sends to Lia"></div>
+        <p id="band-notice-feedback" class="band-notice-feedback" role="status" aria-live="polite"></p>
+        <div class="band-notice-actions"><button type="button" id="band-notice-publish" class="band-notice-publish">Put in chat</button><button type="button" id="band-notice-retry" class="band-notice-retry" hidden>Retry BAND</button><button type="button" id="band-notice-dismiss" class="band-notice-dismiss">Ignore</button></div>
+        <div class="band-notice-foot"><a id="band-notice-room" href="#" target="_blank" rel="noopener noreferrer" hidden>View BAND room ↗</a><button type="button" id="band-notice-menu">More actions</button></div>
+      </div>
+      <div class="band-menu" id="band-menu" role="group" aria-label="BAND actions" tabindex="-1" hidden>
+        <div class="band-menu-heading"><span class="band-menu-kicker">BAND · OUTSIDE AGENT</span><span class="band-menu-spark" aria-hidden="true">✦</span></div>
+        <button type="button" class="band-menu-action" id="band-challenge"><span class="band-menu-icon" aria-hidden="true">↗</span><span><strong>Challenge the AI</strong><small>Question Lia's next move</small></span></button>
+        <button type="button" class="band-menu-action" id="band-create"><span class="band-menu-icon is-create" aria-hidden="true">✳</span><span><strong>Create</strong><small>Draft a startup with Lia</small></span></button>
+        <label class="band-menu-auto" for="band-chat-toggle"><span><strong>BAND joins Lia</strong><small>Review each new Lia answer · 3 model calls</small></span><span class="band-chat-switch"><input type="checkbox" id="band-chat-toggle" aria-label="BAND joins Lia automatically" aria-describedby="band-menu-status" /><span class="band-chat-switch-track" aria-hidden="true"></span></span></label>
+        <p class="band-menu-status" id="band-menu-status" role="status" aria-live="polite">Your question, Lia's answer and mission context go to BAND when this is on.</p>
+      </div>
+      <button type="button" class="band-launcher" id="band-launcher" aria-label="Open BAND actions" aria-expanded="false" aria-controls="band-menu">
+        <img src="https://a.storyblok.com/f/291236425241163/533x144/0005dbb82b/logo.svg" alt="" width="89" height="24" />
+        <span class="band-launcher-fallback" aria-hidden="true">BAND</span>
+        <span class="band-launcher-badge" id="band-launcher-badge" aria-label="Pending BAND suggestions" hidden></span>
+      </button>
     </div>
   </body>
 </html>

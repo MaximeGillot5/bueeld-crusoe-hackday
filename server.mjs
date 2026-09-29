@@ -14,6 +14,8 @@ import { createCreditFallbackProvider } from './ai-fallback.mjs';
 import { createMaturityStore } from './maturity.mjs';
 import { analyzeMissionTurn } from './mission-turn.mjs';
 import { createExperimentStore } from './experiments.mjs';
+import { createBandClient } from './band-client.mjs';
+import { bandConfiguration, createBandReviewService } from './band-review.mjs';
 
 const root = dirname(fileURLToPath(import.meta.url));
 const host = process.env.HOST || '127.0.0.1';
@@ -45,6 +47,13 @@ const provider = createCreditFallbackProvider({
   fallback: createAdalProvider({ beforeRequest: reserveProviderCall }),
   fallbackOnUnconfigured,
 });
+const bandConfig = bandConfiguration();
+const bandReview = createBandReviewService({
+  client: createBandClient(), config: bandConfig,
+  reserveCall: (ownerId) => reserveAiCall(maxCalls, ownerId, maxCallsPerUser),
+  fallbackOnUnconfigured,
+});
+let bandInFlight = false; // Band permits one active socket per registered agent identity.
 const maxGitHubFetches = Number(process.env.MAX_GITHUB_FETCHES || 20);
 const sourceKinds = new Set(['text', 'markdown', 'csv', 'json', 'gmail', 'google_drive', 'google_calendar', 'notion', 'github']);
 const sourceCapabilities = {
@@ -96,6 +105,8 @@ const staticFiles = new Map([
   ['/build-workbench.css', ['build-workbench.css', 'text/css; charset=utf-8']],
   ['/build-home.js', ['build-home.js', 'text/javascript; charset=utf-8']],
   ['/build-experiments.js', ['build-experiments.js', 'text/javascript; charset=utf-8']],
+  ['/band-panel.js', ['band-panel.js', 'text/javascript; charset=utf-8']],
+  ['/band-panel.css', ['band-panel.css', 'text/css; charset=utf-8']],
   ['/experiment-public.css', ['experiment-public.css', 'text/css; charset=utf-8']],
   ['/experiment-public.js', ['experiment-public.js', 'text/javascript; charset=utf-8']],
 ]);
@@ -823,6 +834,26 @@ async function apiExperiments(req, res, path) {
   }
 }
 
+async function apiBandAdvice(req, res, { chatReply = false, create = false } = {}) {
+  let project;
+  try { project = authenticatedProject(req, true); }
+  catch (error) { return respond(res, error.status || 401, { error: error.message }); }
+  if (!bandConfig.configured) return respond(res, 503, { error: 'Band needs two registered agents and their server keys.' });
+  if (bandInFlight) return respond(res, 429, { error: 'A Band exchange is already running. Please retry shortly.' });
+  if (aiCallsUsed() >= maxCalls) return respond(res, 429, { error: 'The demo has reached its AI call limit.' });
+  bandInFlight = true;
+  try {
+    const input = await readJSON(req, chatReply ? 8_000 : 5_500);
+    const snapshot = await maturityStore.getSnapshot(project);
+    return respond(res, 200, await bandReview.advise({ ownerId: project.ownerId,
+      input, snapshot, projectMemory: project.projectMemory, chatReply, create }));
+  } catch (error) {
+    console.error('Band review failed:', error.code || error.status || 'upstream_failure');
+    return respond(res, error.status || 502, { error: error.status ? error.message : 'Band could not complete this review. Please retry.',
+      ...(error.roomId ? { roomId: error.roomId, roomUrl: error.roomUrl } : {}) });
+  } finally { bandInFlight = false; }
+}
+
 const server = createServer(async (req, res) => {
   let path, url;
   try { url = new URL(req.url || '/', 'http://localhost'); path = url.pathname; }
@@ -831,6 +862,10 @@ const server = createServer(async (req, res) => {
   if (await handleConnectorRoute(req, res, url)) return;
   if (req.method === 'GET' && path === '/health') return respond(res, 200, { ok: true });
   if (req.method === 'GET' && path === '/api/demo/usage') return respond(res, 200, { used: aiCallsUsed(), limit: maxCalls });
+  if (req.method === 'GET' && path === '/api/band/status') return respond(res, 200, { configured: bandConfig.configured });
+  if (req.method === 'POST' && path === '/api/band/advice') return apiBandAdvice(req, res);
+  if (req.method === 'POST' && path === '/api/band/chat-reply') return apiBandAdvice(req, res, { chatReply: true });
+  if (req.method === 'POST' && path === '/api/band/create') return apiBandAdvice(req, res, { create: true });
   if (req.method === 'GET' && path === '/api/sources/capabilities') return respond(res, 200, {
     ...sourceCapabilities,
     connectors: [...connectorConfiguration(), sourceCapabilities.connectors.find((item) => item.id === 'github')],
@@ -855,7 +890,7 @@ const server = createServer(async (req, res) => {
       'X-Content-Type-Options': 'nosniff',
       'Referrer-Policy': 'no-referrer',
       'X-Frame-Options': 'DENY',
-      'Content-Security-Policy': "default-src 'self'; connect-src 'self'; img-src 'self' data:; style-src 'self' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; script-src 'self'; base-uri 'none'; object-src 'none'; frame-ancestors 'none'",
+      'Content-Security-Policy': "default-src 'self'; connect-src 'self'; img-src 'self' data: https://a.storyblok.com; style-src 'self' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; script-src 'self'; base-uri 'none'; object-src 'none'; frame-ancestors 'none'",
     });
     res.end(content);
   } catch { respond(res, 404, { error: 'Not found' }); }

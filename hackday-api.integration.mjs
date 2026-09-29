@@ -60,17 +60,62 @@ async function run() {
     const session = await request('/api/auth/session');
     assert.equal(session.status, 200);
     const password = 'Synthetic-Test-Password-2026!';
+    const email = `${randomUUID()}@example.test`;
     const created = await request('/api/auth/signup', { method: 'POST',
-      body: { email: `${randomUUID()}@example.test`, password },
+      body: { email, password },
       cookie: session.cookie, csrf: session.body.csrfToken });
     assert.equal(created.status, 201, JSON.stringify(created.body));
-    return { cookie: created.cookie, csrf: created.body.csrfToken, password };
+    return { cookie: created.cookie, csrf: created.body.csrfToken, password, email, userId: created.body.user.id };
   }
 
   const guestAi = await request('/api/chat', { method: 'POST', body: {} });
   assert.equal(guestAi.status, 401);
+  const bandStatus = await request('/api/band/status');
+  assert.deepEqual(bandStatus.body, { configured: false });
+  const guestBand = await request('/api/band/advice', { method: 'POST',
+    body: { question: 'What would challenge this mission?' } });
+  assert.equal(guestBand.status, 401);
+  const guestBandChat = await request('/api/band/chat-reply', { method: 'POST',
+    body: { question: 'What did Lia miss?', liaReply: 'Lia suggested a pilot.' } });
+  assert.equal(guestBandChat.status, 401);
+  const guestBandCreate = await request('/api/band/create', { method: 'POST', body: { context: {} } });
+  assert.equal(guestBandCreate.status, 401);
   const a = await signup();
   const b = await signup();
+  const loginCase = await signup();
+  const loggedOut = await request('/api/auth/logout', { method: 'POST', cookie: loginCase.cookie,
+    csrf: loginCase.csrf });
+  assert.equal(loggedOut.status, 200);
+  assert.equal(loggedOut.body.authenticated, false);
+  const visitor = await request('/api/auth/session', { cookie: loggedOut.cookie });
+  assert.equal(visitor.status, 200);
+  assert.equal(visitor.body.authenticated, false);
+  const loggedIn = await request('/api/auth/login', { method: 'POST', cookie: visitor.cookie || loggedOut.cookie,
+    csrf: visitor.body.csrfToken, body: { email: loginCase.email, password: loginCase.password } });
+  assert.equal(loggedIn.status, 200, JSON.stringify(loggedIn.body));
+  assert.equal(loggedIn.body.authenticated, true);
+  assert.equal(loggedIn.body.user.id, loginCase.userId);
+  const restoredSession = await request('/api/auth/session', { cookie: loggedIn.cookie });
+  assert.equal(restoredSession.status, 200);
+  assert.equal(restoredSession.body.authenticated, true);
+  assert.equal(restoredSession.body.user.id, loginCase.userId);
+  const bandNoCsrf = await request('/api/band/advice', { method: 'POST', cookie: a.cookie,
+    body: { question: 'What would challenge this mission?' } });
+  assert.equal(bandNoCsrf.status, 403);
+  const bandChatNoCsrf = await request('/api/band/chat-reply', { method: 'POST', cookie: a.cookie,
+    body: { question: 'What did Lia miss?', liaReply: 'Lia suggested a pilot.' } });
+  assert.equal(bandChatNoCsrf.status, 403);
+  const bandCreateNoCsrf = await request('/api/band/create', { method: 'POST', cookie: a.cookie, body: { context: {} } });
+  assert.equal(bandCreateNoCsrf.status, 403);
+  const bandUnconfigured = await request('/api/band/advice', { method: 'POST', cookie: a.cookie, csrf: a.csrf,
+    body: { question: 'What would challenge this mission?' } });
+  assert.equal(bandUnconfigured.status, 503);
+  const bandChatUnconfigured = await request('/api/band/chat-reply', { method: 'POST', cookie: a.cookie, csrf: a.csrf,
+    body: { question: 'What did Lia miss?', liaReply: 'Lia suggested a pilot.' } });
+  assert.equal(bandChatUnconfigured.status, 503);
+  const bandCreateUnconfigured = await request('/api/band/create', { method: 'POST', cookie: a.cookie, csrf: a.csrf,
+    body: { context: {} } });
+  assert.equal(bandCreateUnconfigured.status, 503);
   const memory = await request('/api/project-memory', { method: 'PUT', cookie: a.cookie, csrf: a.csrf,
     body: { projectMemory: { project: 'Synthetic test project', target: 'Test founders', goal: 'Run a first pilot', blocker: 'Demand is unknown' } } });
   assert.equal(memory.status, 200, JSON.stringify(memory.body));
@@ -103,6 +148,16 @@ async function run() {
     'the mission must supply Lia with its questions');
   assert.deepEqual(firstMilestone.draft.answers, ['', '', '']);
   assert.equal(firstMilestone.draft.answeredCount, 0);
+  const resetNoCsrf = await request(`${guidedMission}/reset`, { method: 'POST', cookie: guided.cookie, body: {} });
+  assert.equal(resetNoCsrf.status, 403, 'resetting a guided mission requires the account CSRF token');
+  const resetPending = await request(`${guidedMission}/reset`, { method: 'POST', cookie: guided.cookie,
+    csrf: guided.csrf, body: {} });
+  assert.equal(resetPending.status, 200, JSON.stringify(resetPending.body));
+  assert.deepEqual(resetPending.body.maturity.milestones.find((item) => item.id === 'target_problem').draft.answers,
+    ['', '', '']);
+  const resetValidated = await request(`${guidedMission}/reset`, { method: 'POST', cookie: a.cookie,
+    csrf: a.csrf, body: {} });
+  assert.equal(resetValidated.status, 409, 'a validated mission cannot be reset');
   const answer = 'Independent neighborhood bookstore owners in San Francisco who handle online orders themselves.';
   const missingCsrf = await request(`${guidedMission}/turn`, { method: 'POST', cookie: guided.cookie,
     body: { stepIndex: 0, message: answer } });
@@ -162,7 +217,10 @@ async function run() {
 
 try { await run(); }
 finally {
-  server.kill('SIGTERM');
-  await new Promise((resolve) => server.once('close', resolve));
+  if (server.exitCode === null && server.signalCode === null) {
+    const closed = new Promise((resolve) => server.once('close', resolve));
+    server.kill('SIGTERM');
+    await closed;
+  }
   await rm(dataDir, { recursive: true, force: true });
 }
