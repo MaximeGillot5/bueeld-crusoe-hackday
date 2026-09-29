@@ -2,7 +2,7 @@
 
 A founder workspace for turning a project into a clear next mission. Completing a documented mission can advance the project's **maturity toward a first pilot**. The September 29 edition adds one shareable interest test: publish a question, collect actual responses, close the test, and ask Lia to review the result through [Crusoe Foundry Serverless Inference](https://docs.cloud.crusoe.ai/serverless-inference/index.html).
 
-This is an independent copy of the September 28 BUEELD Lab prototype. See [provenance](PROVENANCE.md) for the inherited foundation and today's changes. The source code and simulated-provider tests are local; **a real Crusoe request and a public deployment are not yet verified**. The guided example is fictional and makes no AI call.
+This is an independent copy of the September 28 BUEELD Lab prototype. See [provenance](PROVENANCE.md) for the inherited foundation and today's changes. The [29 September repository](https://github.com/MaximeGillot5/bueeld-crusoe-hackday) is private. **A real Crusoe request and a public deployment are not yet verified.** The guided example is fictional and makes no AI call.
 
 ## What this edition does
 
@@ -30,7 +30,7 @@ The default data directory is `.data/`, which is ignored by Git. `LAB_DATA_DIR` 
 
 ## Verification
 
-`npm test` runs the new unit suite with a simulated Crusoe response. `npm run test:integration` runs the local account/project/experiment API flow once that integration script is present; it needs permission to bind a loopback port and uses an isolated data directory. These checks do **not** prove that a Crusoe account has a usable key or that a Render deployment works. The inherited AdaL-era chat/API tests target older guest and CLI behavior and are not the release gate for this edition.
+`npm test` runs the unit and frontend state suites with a simulated Crusoe response. `npm run test:integration` runs the local account/project/experiment API flow; it needs permission to bind a loopback port and uses an isolated data directory. These checks do **not** prove that a Crusoe account has a usable key or that a Render deployment works. The inherited AdaL-era chat/API tests target older guest and CLI behavior and are not the release gate for this edition.
 
 For an actual end-to-end smoke test, make one bounded real Lia request with the intended model, record the returned provider/model and usage, publish an experiment, answer from another browser, close it, review it, validate the milestone once, and restart the server to confirm persistence. Repeating the same milestone validation must keep the score unchanged.
 
@@ -48,7 +48,7 @@ The current JSON storage and in-process AI guard require **one Node process / on
 
 [render.yaml](render.yaml) defines a single Node web service, a 1 GB persistent disk mounted at `/var/data`, and `LAB_DATA_DIR=/var/data/lab`. It uses the paid `0.5c-512mb` compute plan, because a persistent disk is required for this file-backed app. Review Render's current cost and the Blueprint changes before applying it. The Blueprint has automatic deploys off. Set the secret `CRUSOE_API_KEY` in Render, then set `LAB_PUBLIC_ORIGIN` to the actual HTTPS service origin if the inferred origin is not correct. The app listens on `0.0.0.0` and Render's `PORT`.
 
-After deployment, verify the health endpoint, signup and cookies, private results, public response form, a real Crusoe answer, a restart, and a coordinated backup/restore into a separate test directory. A Render URL, GitHub URL, video, and judges' access are intentionally absent until created and checked.
+After deployment, verify the health endpoint, signup and cookies, private results, public response form, a real Crusoe answer, a restart, and a coordinated backup/restore into a separate test directory. A Render URL, video, and judges' access are intentionally absent until created and checked.
 
 ## Historical references
 

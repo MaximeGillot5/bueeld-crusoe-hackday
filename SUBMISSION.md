@@ -30,7 +30,8 @@ Use a clearly labelled demo response if no genuine participants have answered. D
 
 | Item | Verified result |
 | --- | --- |
-| GitHub repository and judges' access | Pending |
+| GitHub repository | [Private BUEELD Hack Day repository](https://github.com/MaximeGillot5/bueeld-crusoe-hackday), first edition commit `a3a8feb` pushed on 29 September |
+| Judges' repository access | Pending |
 | Independent live application URL | Pending |
 | Actual Crusoe request and returned model | Pending |
 | End-to-end external-browser experiment | Pending |

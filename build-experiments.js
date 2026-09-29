@@ -9,6 +9,7 @@
   let stats = null;
   let responses = [];
   let busy = false;
+  let dirty = false;
   let loadingGeneration = 0;
 
   function status(message, error = false) {
@@ -75,13 +76,13 @@
     byId("build-experiment-state").textContent = state === "new" ? "Not started" : state;
     const locked = state === "published" || state === "closed";
     for (const input of card.querySelectorAll("#build-experiment-form input, #build-experiment-form select, #build-experiment-form textarea")) input.disabled = locked || busy;
-    byId("build-exp-save").hidden = locked;
+    byId("build-exp-save").hidden = locked || (state === "draft" && !dirty);
     byId("build-exp-save").disabled = busy;
     byId("build-exp-save").textContent = state === "draft" ? "Save draft →" : "Prepare draft →";
-    byId("build-exp-publish").hidden = state !== "draft";
+    byId("build-exp-publish").hidden = state !== "draft" || dirty;
     byId("build-exp-refresh").hidden = !["published", "closed"].includes(state);
     byId("build-exp-close").hidden = state !== "published";
-    byId("build-exp-review").hidden = state !== "closed";
+    byId("build-exp-review").hidden = state !== "closed" || Boolean(review);
     byId("build-exp-apply").hidden = state !== "closed" || !review;
     for (const action of ["build-exp-publish", "build-exp-refresh", "build-exp-close", "build-exp-review", "build-exp-apply"]) byId(action).disabled = busy;
     const url = publicUrl();
@@ -99,7 +100,7 @@
       const list = Array.isArray(data.experiments) ? data.experiments : [];
       const previousId = id();
       experiment = list.find((item) => item.missionId === "interest_test") || null;
-      if (id() !== previousId) { setFields(experiment); review = experiment?.review || null; }
+      if (id() !== previousId) { setFields(experiment); review = experiment?.review || null; dirty = false; }
       render();
       if (experiment && ["published", "closed"].includes(experiment.status)) await loadResults();
     } catch (error) { status(error.message || "Could not load your test.", true); }
@@ -128,6 +129,7 @@
         : await call("POST", "/api/experiments/propose", payload);
       experiment = data.experiment;
       if (!experiment?.id) throw new Error("The test draft was not returned.");
+      dirty = false;
       status("Draft saved. Check the exact question and threshold, then approve publication.");
     } catch (error) { status(error.message || "Could not save draft.", true); }
     finally { busy = false; render(); }
@@ -162,6 +164,11 @@
   }
 
   byId("build-experiment-form").addEventListener("submit", save);
+  byId("build-experiment-form").addEventListener("input", () => {
+    if (experiment?.status !== "draft" || dirty) return;
+    dirty = true;
+    render();
+  });
   byId("build-exp-publish").addEventListener("click", () => action("publish"));
   byId("build-exp-close").addEventListener("click", () => action("close"));
   byId("build-exp-review").addEventListener("click", () => action("review"));

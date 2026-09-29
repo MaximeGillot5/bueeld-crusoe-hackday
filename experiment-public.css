@@ -65,3 +65,6 @@ legend, .survey-comment label { color: #294b36; }
 .survey-privacy { color: #778d7b; }
 .survey-privacy a { color: #326b48; font-weight: 700; text-underline-offset: 2px; }
 .survey-footer span { color: #82b178; }
+@media (max-width: 360px) {
+  .survey-kicker { gap: 6px; font-size: 9px; letter-spacing: .08em; white-space: nowrap; }
+}

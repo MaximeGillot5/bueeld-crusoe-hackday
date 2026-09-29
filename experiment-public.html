@@ -6,11 +6,26 @@
     <meta name="theme-color" content="#f8f7f1" />
     <meta name="description" content="A short project interest test hosted by BUEELD." />
     <title>Project test — BUEELD</title>
-    <link rel="stylesheet" href="/experiment-public.css" />
+    <link rel="stylesheet" href="/experiment-public.css?v=20260929" />
+    <link rel="stylesheet" href="/public-nav.css" />
     <script src="/experiment-public.js" defer></script>
   </head>
   <body>
-    <header class="survey-header"><a href="/" class="survey-brand" aria-label="BUEELD home">BUEELD<span>/</span></a><span>PROJECT TEST</span></header>
+    <header class="survey-header public-header">
+      <a href="/" class="public-brand" aria-label="BUEELD home">
+        <svg class="bueeld-logo" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 280 120" width="110" height="47" role="img" aria-label="BUEELD" focusable="false">
+          <defs><linearGradient id="bueeld-logo-gradient" x1="0%" y1="0%" x2="100%" y2="0%"><stop offset="0%" stop-color="#172c2e" /><stop offset="67%" stop-color="#38694f" /><stop offset="100%" stop-color="#82729f" /></linearGradient></defs>
+          <text x="10" y="85" font-family="Outfit, system-ui, sans-serif" font-size="76" font-weight="800" fill="url(#bueeld-logo-gradient)" letter-spacing="-1.5" aria-hidden="true">bueeld</text>
+        </svg>
+      </a>
+      <nav class="public-nav" aria-label="Site navigation">
+        <a href="/#project">Project</a>
+        <a href="/#missions">Missions</a>
+        <a href="/#lia">Ask Lia</a>
+        <a href="/privacy.html">Privacy</a>
+        <a href="/terms.html">Terms</a>
+      </nav>
+    </header>
     <main class="survey-shell">
       <div class="survey-kicker"><span class="survey-live" aria-hidden="true"></span> SHORT RESEARCH FORM <span aria-hidden="true">/</span> ABOUT 1 MINUTE</div>
       <section class="survey-panel" aria-labelledby="survey-title">

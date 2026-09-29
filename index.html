@@ -21,7 +21,10 @@
     <header class="app-header">
       <div class="app-identity">
         <a class="wordmark build-wordmark" href="#project" aria-label="BUEELD — Project home">
-          BUEELD<span aria-hidden="true">/</span>
+          <svg class="bueeld-logo" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 280 120" width="110" height="47" role="img" aria-label="BUEELD" focusable="false">
+            <defs><linearGradient id="bueeld-logo-gradient" x1="0%" y1="0%" x2="100%" y2="0%"><stop offset="0%" stop-color="#172c2e" /><stop offset="67%" stop-color="#38694f" /><stop offset="100%" stop-color="#82729f" /></linearGradient></defs>
+            <text x="10" y="85" font-family="Outfit, system-ui, sans-serif" font-size="76" font-weight="800" fill="url(#bueeld-logo-gradient)" letter-spacing="-1.5" aria-hidden="true">bueeld</text>
+          </svg>
         </a>
         <span class="identity-divider" aria-hidden="true"></span>
         <div class="lia-identity"><span class="lia-indicator" aria-hidden="true"></span><strong>AI Conference edition</strong><span class="lab-label">CRUSOE</span></div>
@@ -33,6 +36,8 @@
         <button type="button" class="header-action" id="open-missions">Progress <span class="mission-nav-badge" id="mission-nav-badge" hidden>0</span></button>
         <button type="button" class="header-action" id="open-sources">Sources</button>
         <button type="button" class="header-action" id="open-account" aria-label="Account and saved conversations">Account</button>
+        <a class="header-action build-nav-static" href="/privacy.html">Privacy</a>
+        <a class="header-action build-nav-static" href="/terms.html">Terms</a>
         <button type="button" class="header-action" id="reset-chat">New chat</button>
         <details class="header-more" id="header-more">
           <summary class="header-action header-more-trigger" id="header-more-trigger" aria-controls="header-more-actions">More <svg class="header-more-chevron" viewBox="0 0 20 20" aria-hidden="true"><path d="m6 8 4 4 4-4" /></svg></summary>
@@ -80,9 +85,20 @@
           </div>
           <button type="button" class="build-modal-backdrop" id="build-mission-backdrop" aria-label="Close mission" hidden></button>
           <section class="build-mission-details" id="build-mission-details" role="dialog" aria-modal="true" aria-labelledby="build-mission-details-title" tabindex="-1" hidden>
-            <div class="build-detail-top"><div><p class="build-kicker">MISSION BRIEF</p><h2 id="build-mission-details-title">What to do</h2></div><button type="button" class="build-text-link" id="build-mission-details-close">Close</button></div>
-            <ol class="build-mission-steps" id="build-mission-steps"></ol>
-            <p class="build-mission-proof" id="build-mission-proof"></p>
+            <div class="build-mission-hero">
+              <div class="build-mission-hero-copy"><p class="build-kicker">YOUR NEXT MOVE <span aria-hidden="true">/</span> MISSION BRIEF</p><h2 id="build-mission-details-title">What to do</h2><p id="build-mission-description"></p></div>
+              <div class="build-mission-reward"><span id="build-mission-reward-label">ON VALIDATION</span><strong id="build-mission-reward">+0%</strong><small>project maturity</small></div>
+              <button type="button" class="build-mission-close" id="build-mission-details-close" aria-label="Close mission">×</button>
+            </div>
+            <div class="build-mission-progress"><div><span>YOUR PROJECT NOW</span><strong id="build-mission-current-maturity">—</strong><span id="build-mission-potential">Points unlock after evidence is validated.</span></div><progress id="build-mission-progress-bar" max="100" value="0" aria-label="Current project maturity">0%</progress></div>
+            <div class="build-mission-brief" id="build-mission-brief">
+              <div class="build-mission-section-head"><span class="build-kicker" id="build-mission-checkpoints-label">CHECKPOINTS</span><span class="build-mission-section-note">A practical plan for this mission</span></div>
+              <ol class="build-mission-steps" id="build-mission-steps"></ol>
+              <div class="build-mission-proof"><span class="build-mission-proof-icon" aria-hidden="true">↗</span><div><strong>What counts as proof</strong><p id="build-mission-proof"></p></div></div>
+              <div class="build-mission-brief-actions"><button type="button" class="build-primary-button" id="build-mission-start">Record evidence <span aria-hidden="true">→</span></button><span>Progress is earned only after your real result is validated.</span></div>
+            </div>
+            <div class="build-mission-work" id="build-mission-work" hidden>
+              <div class="build-mission-work-heading"><button type="button" class="build-text-link" id="build-mission-back">← Mission brief</button><div><p class="build-kicker" id="build-mission-work-kicker">REAL-WORLD RESULT</p><h3 id="build-mission-work-title" tabindex="-1">Record your evidence</h3></div></div>
             <section class="build-experiment-card" id="build-experiment-card" aria-labelledby="build-experiment-title" hidden>
               <div class="build-detail-top"><div><p class="build-kicker">SHAREABLE TEST</p><h3 id="build-experiment-title">Test interest with real people.</h3></div><span class="build-experiment-state" id="build-experiment-state">Draft</span></div>
               <p class="build-experiment-intro">Set a clear question and success threshold. You approve the public form before sharing it.</p>
@@ -92,7 +108,7 @@
                 <div><label for="build-exp-question">One measurable question</label><input id="build-exp-question" maxlength="220" required placeholder="Would you try this in the next month?" /></div>
                 <div class="build-experiment-fields"><div><label for="build-exp-option-yes">Response A</label><input id="build-exp-option-yes" maxlength="90" required value="Yes, I would try it" /></div><div><label for="build-exp-option-no">Response B</label><input id="build-exp-option-no" maxlength="90" required value="Not right now" /></div></div>
                 <div class="build-experiment-fields"><div><label for="build-exp-success">Response that signals interest</label><select id="build-exp-success"><option value="0">Response A</option><option value="1">Response B</option></select></div><div class="build-experiment-threshold"><label for="build-exp-minimum">Success threshold</label><span><input id="build-exp-minimum" type="number" min="1" max="100" value="10" required /> responses, <input id="build-exp-percent" type="number" min="1" max="100" value="40" required />% interested</span></div></div>
-                <div class="build-experiment-actions"><button type="submit" class="build-primary-button" id="build-exp-save">Prepare draft <span aria-hidden="true">→</span></button><button type="button" class="build-secondary-button" id="build-exp-publish" hidden>Approve &amp; publish</button><button type="button" class="build-secondary-button" id="build-exp-refresh" hidden>Refresh results</button><button type="button" class="build-secondary-button" id="build-exp-close" hidden>Close test</button><button type="button" class="build-secondary-button" id="build-exp-review" hidden>Analyze with Lia</button><button type="button" class="build-secondary-button" id="build-exp-apply" hidden>Use as mission evidence</button></div>
+                <div class="build-experiment-actions"><button type="submit" class="build-primary-button" id="build-exp-save">Prepare draft <span aria-hidden="true">→</span></button><button type="button" class="build-primary-button" id="build-exp-publish" hidden>Approve &amp; publish</button><button type="button" class="build-text-link" id="build-exp-refresh" hidden>Refresh results</button><button type="button" class="build-primary-button" id="build-exp-close" hidden>Close test</button><button type="button" class="build-primary-button" id="build-exp-review" hidden>Analyze with Lia</button><button type="button" class="build-primary-button" id="build-exp-apply" hidden>Use as mission evidence</button></div>
               </form>
               <div class="build-experiment-public" id="build-exp-public" hidden><span>PUBLIC FORM</span><a id="build-exp-link" href="#" target="_blank" rel="noopener noreferrer"></a><button type="button" class="build-text-link" id="build-exp-copy">Copy link</button></div>
               <div id="build-exp-results" class="build-experiment-results" hidden><h4>Results</h4><p id="build-exp-count"></p><p id="build-exp-signal"></p><p id="build-exp-review-text"></p><ul id="build-exp-comments"></ul></div>
@@ -105,6 +121,8 @@
               <label class="build-evidence-attestation"><input type="checkbox" id="build-evidence-real" required /> This is evidence from my real project, not the sample demo.</label>
               <div class="build-evidence-actions"><p id="build-evidence-status" role="status" aria-live="polite"></p><button type="submit" class="build-primary-button" id="build-evidence-submit">Submit evidence for validation <span aria-hidden="true">→</span></button></div>
             </form>
+            </div>
+            <div class="build-mission-success" id="build-mission-success" hidden><span class="build-mission-success-icon" aria-hidden="true">✓</span><p class="build-kicker">MISSION VALIDATED</p><h3>Real evidence. Real progress.</h3><p id="build-mission-success-summary"></p><button type="button" class="build-primary-button" id="build-mission-success-close">Back to project <span aria-hidden="true">→</span></button></div>
           </section>
           <div class="build-home-footer"><p>BUEELD turns decisions into testable missions. Lia helps you prepare the work; your results determine progress.</p><button type="button" class="build-text-link" id="build-open-sources">Project sources <span aria-hidden="true">↗</span></button></div>
         </div>

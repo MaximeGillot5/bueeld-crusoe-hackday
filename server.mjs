@@ -55,6 +55,7 @@ const staticFiles = new Map([
   ['/privacy.html', ['privacy.html', 'text/html; charset=utf-8']],
   ['/terms.html', ['terms.html', 'text/html; charset=utf-8']],
   ['/legal.css', ['legal.css', 'text/css; charset=utf-8']],
+  ['/public-nav.css', ['public-nav.css', 'text/css; charset=utf-8']],
   ['/styles.css', ['styles.css', 'text/css; charset=utf-8']],
   ['/progress.css', ['progress.css', 'text/css; charset=utf-8']],
   ['/assets/progress-hero.png', ['assets/progress-hero.png', 'image/png']],

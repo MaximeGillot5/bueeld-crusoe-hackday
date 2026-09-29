@@ -55,22 +55,41 @@
     byId("build-mission-details").hidden = true;
     byId("build-mission-backdrop").hidden = true;
     document.body.classList.toggle("build-modal-open", currentView === "roadmap");
+    selectedMission = null;
     if (restoreFocus && lastMissionOpener instanceof HTMLElement) lastMissionOpener.focus();
+  }
+
+  function setMissionStage(stage) {
+    const brief = byId("build-mission-brief");
+    const work = byId("build-mission-work");
+    const success = byId("build-mission-success");
+    const interestTest = missionId(currentMission()) === "interest_test";
+    brief.hidden = stage !== "brief";
+    work.hidden = !["work", "evidence"].includes(stage);
+    success.hidden = stage !== "success";
+    work.dataset.stage = stage === "work" && interestTest ? "experiment" : "evidence";
+    byId("build-experiment-card").hidden = work.dataset.stage !== "experiment";
+    byId("build-evidence-form").hidden = work.dataset.stage !== "evidence";
+    if (stage === "work" || stage === "evidence") byId("build-mission-work-title").focus();
+    if (stage === "success") byId("build-mission-success-close").focus();
   }
 
   function showMission(mission) {
     lastMissionOpener = document.activeElement;
     renderMissionDetails(mission);
+    setMissionStage("brief");
     byId("build-mission-details").hidden = false;
     byId("build-mission-backdrop").hidden = false;
     document.body.classList.add("build-modal-open");
     byId("build-mission-details").focus();
+    window.dispatchEvent(new CustomEvent("build:mission-opened", { detail: { mission } }));
   }
 
   function accountState(message) {
     snapshot = null;
     byId("build-home-grid").hidden = false;
     byId("build-maturity-value").textContent = "—";
+    byId("build-maturity-value").nextElementSibling.hidden = true;
     byId("build-maturity-progress").value = 0;
     byId("build-maturity-progress").setAttribute("aria-valuetext", "Project maturity unavailable");
     text(byId("build-maturity-status"), "Sign in to begin");
@@ -199,6 +218,7 @@
 
   function renderMissionDetails(mission) {
     text(byId("build-mission-details-title"), mission.title || "Your mission");
+    text(byId("build-mission-description"), mission.description || mission.summary || "Make one useful move, then bring back what actually happened.");
     const criterion = mission.criterion || mission.successCriterion || mission.evidenceRequired;
     const steps = Array.isArray(mission.steps) && mission.steps.length ? mission.steps.slice(0, 3) : [
       "Review the evidence criterion before starting.",
@@ -211,10 +231,23 @@
       item.textContent = typeof step === "string" ? step : step?.title || step?.description || "Complete this step";
       return item;
     }));
-    text(byId("build-mission-proof"), criterion ? `Validation criterion: ${criterion}` : "Describe the observed result and attach a source when you have one. BUEELD will only add points after the evidence is validated.");
+    text(byId("build-mission-proof"), criterion || "Describe the observed result and attach a source when you have one. Only validated real evidence adds maturity.");
+    text(byId("build-mission-checkpoints-label"), `${steps.length} CHECKPOINT${steps.length === 1 ? "" : "S"}`);
     const id = missionId(mission);
     const isMetric = metricMilestones.has(id);
-    const prepared = snapshot?.maturity?.milestones?.find((item) => item.id === id)?.plannedCriterion?.criterion;
+    const milestone = snapshot?.maturity?.milestones?.find((item) => item.id === id);
+    const prepared = milestone?.plannedCriterion?.criterion;
+    const validated = milestone?.validated === true || milestone?.status === "validated" || milestone?.status === "earned";
+    const gain = Number(mission.gain ?? mission.weight ?? mission.points);
+    const score = Number(snapshot?.maturity?.percent);
+    const hasScore = Number.isInteger(score) && score >= 0 && score <= 100;
+    const reward = Number.isInteger(gain) && gain > 0 ? gain : 0;
+    text(byId("build-mission-reward-label"), validated ? "ALREADY EARNED" : "ON VALIDATION");
+    text(byId("build-mission-reward"), reward ? `+${reward}%` : "—");
+    text(byId("build-mission-current-maturity"), hasScore ? `${score}%` : "—");
+    byId("build-mission-progress-bar").value = hasScore ? score : 0;
+    byId("build-mission-progress-bar").setAttribute("aria-valuetext", hasScore ? `${score} percent validated` : "Project maturity unavailable");
+    text(byId("build-mission-potential"), validated ? "This milestone is already validated" : hasScore && reward ? `Could reach ${Math.min(100, score + reward)}% once validated` : "Points unlock after evidence is validated.");
     byId("build-evidence-metric").hidden = !isMetric;
     byId("build-evidence-observed").required = isMetric && Boolean(prepared);
     byId("build-evidence-submit").disabled = isMetric && !prepared;
@@ -225,13 +258,18 @@
     const learnedOption = byId("build-evidence-outcome").querySelector('option[value="learned"]');
     learnedOption.hidden = isMetric;
     if (isMetric) byId("build-evidence-outcome").value = "met";
-    window.dispatchEvent(new CustomEvent("build:mission-opened", { detail: { mission } }));
+    text(byId("build-mission-work-kicker"), id === "interest_test" ? "SHAREABLE TEST" : "REAL-WORLD RESULT");
+    text(byId("build-mission-work-title"), id === "interest_test" ? "Design your public test" : "Record your evidence");
+    const start = byId("build-mission-start");
+    start.dataset.action = isMetric && !prepared ? "criterion" : "work";
+    text(start, isMetric && !prepared ? "Set success threshold →" : id === "interest_test" ? "Prepare public test →" : "Record evidence →");
   }
 
   function renderMission(mission, maturity) {
     const score = Number(maturity?.percent);
     const hasScore = Number.isInteger(score) && score >= 0 && score <= 100;
     text(byId("build-maturity-value"), hasScore ? score : "—");
+    byId("build-maturity-value").nextElementSibling.hidden = !hasScore;
     byId("build-maturity-progress").value = hasScore ? score : 0;
     byId("build-maturity-progress").setAttribute("aria-valuetext", hasScore ? `${score} percent of first-pilot readiness` : "Project maturity unavailable");
     text(byId("build-roadmap-percent"), hasScore ? `${score}%` : "—");
@@ -252,7 +290,7 @@
     text(byId("build-next-description"), mission.description || mission.summary || "Complete the mission and collect the evidence needed for validation.");
     const gainNode = byId("build-mission-gain");
     gainNode.hidden = !Number.isInteger(gain) || gain <= 0;
-    if (!gainNode.hidden) text(gainNode, `+${gain} pts`);
+    if (!gainNode.hidden) text(gainNode, `+${gain}% maturity`);
     const criterion = mission.criterion || mission.successCriterion || mission.evidenceRequired;
     const criterionNode = byId("build-next-criterion");
     criterionNode.hidden = !criterion;
@@ -320,6 +358,7 @@
     if (!getAccount().authenticated) { byId("open-account")?.click(); return; }
     const milestones = snapshot?.maturity?.milestones || [];
     const milestone = milestones.find((item) => String(item.id || item.milestoneId) === "interest_test") || {};
+    selectView("project");
     selectedMission = {
       id: "interest_test",
       milestoneId: "interest_test",
@@ -329,7 +368,6 @@
       gain: milestone.weight ?? 5,
       steps: ["Define one hypothesis and a threshold.", "Approve and share the public form.", "Close the test, review responses, and record what you learned."]
     };
-    selectView("project");
     showMission(selectedMission);
   }
 
@@ -339,6 +377,7 @@
     byId("build-evidence-summary").value = summary.slice(0, 1500);
     byId("build-evidence-reference").value = experimentId;
     byId("build-evidence-outcome").value = outcome;
+    setMissionStage("evidence");
     byId("build-evidence-form").scrollIntoView({ behavior: "smooth", block: "start" });
     byId("build-evidence-real").focus();
     const note = byId("build-evidence-status");
@@ -368,6 +407,7 @@
       return;
     }
     const button = byId("build-evidence-submit");
+    selectedMission = mission;
     button.disabled = true;
     feedback.dataset.error = "false";
     text(feedback, "Checking this milestone…");
@@ -391,7 +431,10 @@
         : response?.message || "Evidence saved. The milestone will progress when its criterion is met.");
       byId("build-evidence-form").reset();
       evidenceSourceKind = "manual";
-      if (after > before) closeMission();
+      if (after > before) {
+        text(byId("build-mission-success-summary"), `Project maturity moved from ${before}% to ${after}% after this mission's evidence was validated.`);
+        setMissionStage("success");
+      }
     } catch (error) {
       feedback.dataset.error = "true";
       text(feedback, readableError(error));
@@ -412,6 +455,16 @@
   byId("build-next-action").addEventListener("click", openNextMission);
   byId("build-mission-details-close").addEventListener("click", closeMission);
   byId("build-mission-backdrop").addEventListener("click", closeMission);
+  byId("build-mission-success-close").addEventListener("click", closeMission);
+  byId("build-mission-back").addEventListener("click", () => { setMissionStage("brief"); byId("build-mission-start").focus(); });
+  byId("build-mission-start").addEventListener("click", () => {
+    if (byId("build-mission-start").dataset.action === "criterion") {
+      closeMission(false);
+      selectView("roadmap", { focus: true });
+      return;
+    }
+    setMissionStage("work");
+  });
   byId("build-evidence-form").addEventListener("submit", submitEvidence);
   window.addEventListener("hashchange", () => selectView(location.hash === "#missions" ? "roadmap" : location.hash === "#lia" ? "lia" : "project", { focus: true }));
   document.addEventListener("keydown", (event) => {
