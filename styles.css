@@ -527,6 +527,54 @@ body.canvas-open { overflow: hidden; }
 .source-inline-form input:disabled { background: #f6f7fa; }
 .source-inline-form input[type="file"] { padding: 5px 8px; }
 .source-inline-form input[type="file"]::file-selector-button { margin-right: 9px; border: 1px solid #d9d5f2; border-radius: 5px; padding: 3px 7px; background: #f7f6ff; color: #5146bd; font: inherit; font-weight: 700; }
+.plaud-source { border-color: #d4e6df; background: linear-gradient(160deg, #ffffff 72%, #f5faf7); }
+.plaud-gate[hidden], .plaud-pairing[hidden], .plaud-detail[hidden], .plaud-evidence-form[hidden], #plaud-controls[hidden], #plaud-embedded-controls[hidden] { display: none !important; }
+.plaud-source .source-eyebrow { color: #27785f; }
+.plaud-gate { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; border-radius: 9px; padding: 11px 12px; background: #f5f8f7; }
+.plaud-gate p { margin: 0; color: #475467; font-size: 11.5px; }
+.plaud-actions { display: flex; flex-wrap: wrap; gap: 8px; margin: 11px 0; }
+.plaud-actions button, .plaud-detail-heading button { min-height: 36px; border: 1px solid #d2ded8; border-radius: 8px; padding: 7px 12px; background: #fff; color: #286a55; font-size: 11.5px; font-weight: 700; }
+.plaud-actions button:hover:not(:disabled), .plaud-detail-heading button:hover:not(:disabled) { background: #eff7f2; }
+.plaud-actions .source-primary { border-color: #287a5c; background: #287a5c; color: #fff; }
+.plaud-actions .source-primary:hover:not(:disabled), .plaud-evidence-form .source-primary:hover:not(:disabled) { background: #206a50; }
+.plaud-actions button:disabled, .plaud-detail-heading button:disabled { opacity: .5; }
+.plaud-pairing { display: grid; justify-items: start; gap: 5px; border: 1px solid #c6e0d2; border-radius: 9px; padding: 11px 12px; background: #f2faf5; }
+.plaud-pairing span { color: #356b56; font-size: 10px; font-weight: 700; }
+.plaud-pairing output { color: #123e2d; font-size: 24px; font-weight: 800; letter-spacing: .18em; overflow-wrap: anywhere; }
+.plaud-pairing small { color: #5e7669; font-size: 10.5px; }
+.plaud-import-form { display: grid; gap: 7px; margin-top: 12px; border: 1px solid #dbe6e0; border-radius: 9px; padding: 12px; background: #f8fbf9; }
+.plaud-import-form strong { color: #1f4937; font-size: 11.5px; }
+.plaud-import-form label { color: #475467; font-size: 10.5px; font-weight: 700; }
+.plaud-import-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.plaud-import-actions input { flex: 1 1 220px; min-width: 0; max-width: 100%; color: #344054; font: inherit; font-size: 11px; }
+.plaud-import-actions button { min-height: 36px; border: 1px solid #287a5c; border-radius: 8px; padding: 7px 12px; background: #287a5c; color: #fff; font: inherit; font-size: 11.5px; font-weight: 700; }
+.plaud-import-actions button:disabled { opacity: .5; }
+.plaud-import-form small { color: #667085; font-size: 10.5px; line-height: 1.45; }
+.plaud-transcriptions { display: grid; gap: 8px; margin-top: 10px; }
+.plaud-empty { margin: 0; border: 1px dashed #cadcd3; border-radius: 9px; padding: 13px; color: #667085; font-size: 11.5px; }
+.plaud-interview { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; border: 1px solid #dfe9e3; border-radius: 9px; padding: 11px 12px; background: #fff; }
+.plaud-interview strong { display: block; color: #1f4937; font-size: 11.5px; }
+.plaud-interview small { display: block; margin-top: 3px; color: #667085; font-size: 10px; }
+.plaud-interview p { margin: 6px 0 0; color: #475467; font-size: 11px; line-height: 1.45; overflow-wrap: anywhere; }
+.plaud-interview button { flex: 0 0 auto; min-height: 32px; border: 1px solid #c9dbd1; border-radius: 7px; padding: 5px 9px; background: #f4faf6; color: #25694f; font-size: 10.5px; font-weight: 700; }
+.plaud-interview button:hover:not(:disabled) { background: #e8f3ec; }
+.plaud-detail { margin-top: 13px; border-top: 1px solid #dfebe4; padding-top: 13px; }
+.plaud-detail-heading { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.plaud-detail-heading h4 { margin: 0; color: #1f4937; font-size: 13px; }
+.plaud-detail-meta, .plaud-detail-help { margin: 6px 0 10px !important; color: #667085; font-size: 10.5px !important; }
+.plaud-segments { display: grid; gap: 7px; max-height: 320px; overflow-y: auto; margin: 0 0 14px; padding: 0; list-style: none; }
+.plaud-segment { display: flex; gap: 9px; border: 1px solid #e0e9e4; border-radius: 8px; padding: 9px 10px; background: #fff; cursor: pointer; }
+.plaud-segment:has(input:checked) { border-color: #64af85; background: #f1faf4; }
+.plaud-segment input { flex: 0 0 auto; width: 15px; height: 15px; margin: 2px 0 0; accent-color: #287a5c; }
+.plaud-segment span { min-width: 0; color: #344d40; font-size: 11px; line-height: 1.5; overflow-wrap: anywhere; }
+.plaud-segment strong { display: block; margin-bottom: 2px; color: #287a5c; font-size: 10px; }
+.plaud-evidence-form { display: grid; gap: 8px; }
+.plaud-evidence-form > label:not(.plaud-confirm) { color: #344d40; font-size: 11px; font-weight: 700; }
+.plaud-evidence-form textarea { width: 100%; min-height: 75px; resize: vertical; border: 1px solid #cfdcd4; border-radius: 8px; padding: 9px 10px; color: #243e31; font: inherit; font-size: 11.5px; line-height: 1.5; }
+.plaud-confirm { display: flex; align-items: flex-start; gap: 8px; color: #475467; font-size: 10.5px; line-height: 1.45; }
+.plaud-confirm input { flex: 0 0 auto; width: 15px; height: 15px; margin-top: 1px; accent-color: #287a5c; }
+.plaud-evidence-form .source-primary { justify-self: start; border-color: #287a5c; background: #287a5c; }
+.plaud-evidence-help { margin: 0 !important; color: #667085; font-size: 10.5px !important; }
 .source-availability { color: #667085; font-size: 10px; font-weight: 700; text-align: right; }
 .source-availability.is-available { color: #0b827c; }
 .source-import-hint { margin-bottom: 11px !important; border-left: 2px solid #0f9f99; padding-left: 9px; color: #347a76 !important; font-weight: 600; }
@@ -582,6 +630,8 @@ body.source-open { overflow: hidden; }
   .source-discuss { align-items: stretch; flex-direction: column; }
   .source-result-head { gap: 5px; }
   .source-result-controls { flex-wrap: wrap; }
+  .plaud-interview { flex-direction: column; }
+  .plaud-detail-heading { align-items: flex-start; }
 }
 
 .source-result h4, .source-result-sources li { overflow-wrap: anywhere; }

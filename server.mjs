@@ -4,12 +4,13 @@ import { createHash, randomUUID, timingSafeEqual } from 'node:crypto';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { connectorConfiguration, getLabSession, handleConnectorRoute } from './connectors.mjs';
-import { handleAccountRoute, normalizeProjectMemory, projectForLabSession, registerAccountDeletionHook } from './accounts.mjs';
+import { handleAccountRoute, labAccountExists, normalizeProjectMemory, projectForLabSession, registerAccountDeletionHook } from './accounts.mjs';
 import { aiCallsUsed, forgetAiUser, reserveAiCall } from './quota.mjs';
 import { explicitChatResponseLanguage } from './chat-language.mjs';
 import { createCrusoeProvider } from './ai-provider.mjs';
 import { createMaturityStore } from './maturity.mjs';
 import { createExperimentStore } from './experiments.mjs';
+import { createPlaudIntegration } from './plaud.mjs';
 
 const root = dirname(fileURLToPath(import.meta.url));
 const host = process.env.HOST || '127.0.0.1';
@@ -17,7 +18,9 @@ const port = Number(process.env.PORT || 4173);
 const dataDir = process.env.LAB_DATA_DIR || join(root, '.data');
 const maturityStore = createMaturityStore({ dataDir });
 const experimentStore = createExperimentStore({ dataDir });
+const plaud = createPlaudIntegration({ dataDir, isOwnerActive: labAccountExists });
 registerAccountDeletionHook(async (ownerId) => {
+  await plaud.deleteOwner(ownerId);
   await experimentStore.deleteOwner(ownerId);
   await maturityStore.deleteOwner(ownerId);
   await forgetAiUser(ownerId);
@@ -81,6 +84,7 @@ const staticFiles = new Map([
   ['/build-home.css', ['build-home.css', 'text/css; charset=utf-8']],
   ['/build-home.js', ['build-home.js', 'text/javascript; charset=utf-8']],
   ['/build-experiments.js', ['build-experiments.js', 'text/javascript; charset=utf-8']],
+  ['/plaud-web.js', ['plaud-web.js', 'text/javascript; charset=utf-8']],
   ['/experiment-public.css', ['experiment-public.css', 'text/css; charset=utf-8']],
   ['/experiment-public.js', ['experiment-public.js', 'text/javascript; charset=utf-8']],
 ]);
@@ -211,17 +215,21 @@ async function askAI(prompt) {
   return response.text;
 }
 
-async function readJSON(req, maxCharacters = 12_000) {
+async function readJSON(req, maxCharacters = 12_000, maxBytes = maxCharacters * 4) {
   if (!String(req.headers['content-type'] || '').startsWith('application/json')) {
     throw Object.assign(new Error('Send JSON'), { status: 415 });
   }
   const timeout = setTimeout(() => req.destroy(new Error('Request body timed out')), 10_000);
   try {
-    let raw = '';
+    const chunks = [];
+    let size = 0;
     for await (const chunk of req) {
-      raw += chunk;
-      if (raw.length > maxCharacters) throw Object.assign(new Error('Input is too long'), { status: 413 });
+      size += chunk.length;
+      if (size > maxBytes) throw Object.assign(new Error('Input is too long'), { status: 413 });
+      chunks.push(chunk);
     }
+    const raw = Buffer.concat(chunks, size).toString('utf8');
+    if (raw.length > maxCharacters) throw Object.assign(new Error('Input is too long'), { status: 413 });
     const parsed = JSON.parse(raw);
     if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
       throw new Error('Expected a JSON object');
@@ -633,6 +641,18 @@ async function apiProject(req, res, path) {
     const milestone = /^\/api\/projects\/current\/milestones\/([a-z_]+)\/(validate|criterion)$/.exec(path);
     if (milestone?.[2] === 'validate' && req.method === 'POST') {
       const input = await readJSON(req, 6_000);
+      if (typeof input.source?.reference === 'string' && input.source.reference.startsWith('plaud:')) {
+        if (milestone[1] !== 'field_observations' || input.source.kind !== 'import') {
+          return respond(res, 400, { error: 'Plaud interviews can document field observations only.' });
+        }
+        const verified = await plaud.verifyQuote({ ...project,
+          reference: input.source.reference, quote: input.plaudQuote });
+        if (typeof input.evidence?.summary !== 'string' ||
+            !input.evidence.summary.includes(input.plaudQuote.text)) {
+          return respond(res, 400, { error: 'Include the selected Plaud quote in your field observation.' });
+        }
+        input.evidence = { ...input.evidence, reference: verified.reference };
+      }
       if (input.source?.kind === 'experiment') {
         if (milestone[1] !== 'interest_test') return respond(res, 400, { error: 'This form measures stated interest only.' });
         const linked = await experimentStore.evidenceFor({ ...project, id: input.source.reference });
@@ -654,12 +674,57 @@ async function apiProject(req, res, path) {
     }
     if (path === '/api/projects/current/diagnosis' && req.method === 'POST') {
       const input = await readJSON(req, 25_000);
+      if (input.assessments?.some((item) => typeof item?.source?.reference === 'string' &&
+          item.source.reference.startsWith('plaud:'))) {
+        return respond(res, 400, { error: 'Validate Plaud interviews through the field observations mission.' });
+      }
       return respond(res, 200, await maturityStore.diagnoseProject({ ...project, assessments: input.assessments, confirmed: input.confirmed }));
     }
     return respond(res, 404, { error: 'Not found' });
   } catch (error) {
     console.error('Project request failed:', error.status || 'internal');
     return respond(res, error.status || 500, { error: error.status ? error.message : 'The project could not be updated.' });
+  }
+}
+
+async function apiPlaud(req, res, path) {
+  try {
+    if (path === '/api/plaud/status' && req.method === 'GET') {
+      return respond(res, 200, { configured: plaud.configured });
+    }
+    if (path === '/api/plaud/pairings' && req.method === 'POST') {
+      const project = authenticatedProject(req, true);
+      return respond(res, 201, plaud.createPairing(project));
+    }
+    if (path === '/api/plaud/pairings/exchange' && req.method === 'POST') {
+      const input = await readJSON(req, 1_000);
+      return respond(res, 200, await plaud.exchangePairing(input.code, req.socket?.remoteAddress));
+    }
+    if (path === '/api/plaud/imports/srt' && req.method === 'POST') {
+      const project = authenticatedProject(req, true);
+      const input = await readJSON(req, 350_000, 350_000);
+      const result = await plaud.importSrt({ ...project, srt: input.srt, title: input.title });
+      return respond(res, result.duplicate ? 200 : 201, result);
+    }
+    if (path === '/api/plaud/transcriptions' && req.method === 'POST') {
+      const input = await readJSON(req, 6_000);
+      const result = await plaud.submitTranscription({ ...input, authorization: req.headers.authorization });
+      return respond(res, result.duplicate ? 200 : result.status === 'SUCCESS' ? 201 : 202, result);
+    }
+    if (path === '/api/plaud/transcriptions' && req.method === 'GET') {
+      const project = authenticatedProject(req);
+      return respond(res, 200, { transcriptions: await plaud.list(project) });
+    }
+    const detail = /^\/api\/plaud\/transcriptions\/([0-9a-f-]{36})$/.exec(path);
+    if (detail && req.method === 'GET') {
+      const project = authenticatedProject(req);
+      return respond(res, 200, { transcription: await plaud.get({ ...project, id: detail[1] }) });
+    }
+    return respond(res, 404, { error: 'Not found' });
+  } catch (error) {
+    console.error('Plaud request failed:', error.status || 'internal');
+    return respond(res, error.status || 500,
+      { error: error.status ? error.message : 'The Plaud request could not be completed.' });
   }
 }
 
@@ -747,6 +812,7 @@ const server = createServer(async (req, res) => {
     ...sourceCapabilities,
     connectors: [...connectorConfiguration(), sourceCapabilities.connectors.find((item) => item.id === 'github')],
   });
+  if (path.startsWith('/api/plaud/')) return apiPlaud(req, res, path);
   if (path.startsWith('/api/projects/')) return apiProject(req, res, path);
   if (path === '/api/experiments' || path.startsWith('/api/experiments/') || path.startsWith('/api/public/experiments/')) {
     return apiExperiments(req, res, path);
