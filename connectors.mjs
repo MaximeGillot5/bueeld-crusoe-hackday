@@ -4,7 +4,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 // Cookies are shared across ports, so independent local Lab servers need distinct names.
-const COOKIE = `bueeld_lab_session_${Number(process.env.PORT || 4173)}`;
+const COOKIE = `bueeld_lab_session_${Number(process.env.LAB_SESSION_COOKIE_PORT || process.env.PORT || 4173)}`;
 const SESSION_TTL_MS = 2 * 60 * 60 * 1000;
 const ACCOUNT_SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 const STATE_TTL_MS = 10 * 60 * 1000;
