@@ -45,6 +45,9 @@ async function origin() {
 
 async function run() {
   const base = await origin();
+  const plaudScript = await fetch(`${base}/plaud-web.js`);
+  assert.equal(plaudScript.status, 200);
+  assert.match(await plaudScript.text(), /plaud\/transcriptions/);
   async function request(path, { method = 'GET', body, cookie, csrf } = {}) {
     const response = await fetch(`${base}${path}`, {
       method,
@@ -69,8 +72,19 @@ async function run() {
 
   const guestAi = await request('/api/chat', { method: 'POST', body: {} });
   assert.equal(guestAi.status, 401);
+  const plaudStatus = await request('/api/plaud/status');
+  assert.deepEqual(plaudStatus.body, { configured: false });
+  const guestPlaud = await request('/api/plaud/transcriptions');
+  assert.equal(guestPlaud.status, 401);
   const a = await signup();
   const b = await signup();
+  const plaudWithoutCsrf = await request('/api/plaud/pairings', { method: 'POST', cookie: a.cookie });
+  assert.equal(plaudWithoutCsrf.status, 403);
+  const plaudWithoutCredentials = await request('/api/plaud/pairings', {
+    method: 'POST', cookie: a.cookie, csrf: a.csrf });
+  assert.equal(plaudWithoutCredentials.status, 503);
+  const emptyPlaudList = await request('/api/plaud/transcriptions', { cookie: a.cookie });
+  assert.deepEqual(emptyPlaudList.body, { transcriptions: [] });
   const memory = await request('/api/project-memory', { method: 'PUT', cookie: a.cookie, csrf: a.csrf,
     body: { projectMemory: { project: 'Synthetic test project', target: 'Test founders', goal: 'Run a first pilot', blocker: 'Demand is unknown' } } });
   assert.equal(memory.status, 200, JSON.stringify(memory.body));
@@ -83,6 +97,14 @@ async function run() {
     method: 'POST', cookie: a.cookie, csrf: a.csrf, body: milestoneBody });
   assert.equal(advanced.status, 200, JSON.stringify(advanced.body));
   assert.equal(advanced.body.transition.gain, 5);
+  const inventedPlaudId = randomUUID();
+  const inventedPlaud = await request('/api/projects/current/milestones/field_observations/validate', {
+    method: 'POST', cookie: a.cookie, csrf: a.csrf,
+    body: { evidence: { summary: 'A purported Plaud conversation described onboarding friction.', real: true },
+      source: { kind: 'import', reference: `plaud:${inventedPlaudId}` }, outcome: 'met',
+      plaudQuote: { start: 0, text: 'An invented quote' }, requestId: randomUUID() } });
+  assert.equal(inventedPlaud.status, 404);
+  assert.equal((await request('/api/projects/current/maturity', { cookie: a.cookie })).body.maturity.percent, 5);
   const duplicate = await request('/api/projects/current/milestones/target_problem/validate', {
     method: 'POST', cookie: a.cookie, csrf: a.csrf, body: milestoneBody });
   assert.equal(duplicate.body.transition.gain, 0);

@@ -15,6 +15,7 @@
     <script src="./progress-panel.js" defer></script>
     <script src="./build-home.js" defer></script>
     <script src="./build-experiments.js" defer></script>
+    <script src="./plaud-web.js" defer></script>
   </head>
   <body>
     <a class="skip-link" href="#main">Skip to main content</a>
@@ -370,6 +371,41 @@
               <input id="local-source-file" type="file" accept=".pdf,.txt,.md,.csv,.json,.eml,.ics,application/pdf,text/plain,text/markdown,text/csv,application/json,message/rfc822,text/calendar" disabled />
               <button type="submit" class="source-primary" id="analyze-local" disabled>Analyze file with Lia</button>
             </form>
+          </section>
+
+          <section class="source-section plaud-source" id="plaud-source" aria-labelledby="plaud-source-title">
+            <div class="source-section-heading"><div><span class="source-eyebrow">FIELD INTERVIEW · PLAUD</span><h3 id="plaud-source-title">Bring a Plaud interview into BUEELD</h3></div><span class="source-availability" id="plaud-availability">Checking availability…</span></div>
+            <p>Use the temporary iPhone bridge to sync a recording from the Plaud NotePin S. Review timestamped quotes here, then confirm what you actually learned before adding evidence to your project path.</p>
+            <div id="plaud-account-gate" class="plaud-gate" hidden>
+              <p>Sign in to Lab to link your interview to your project.</p>
+              <button type="button" class="source-primary" id="plaud-sign-in">Sign in</button>
+            </div>
+            <div id="plaud-controls" hidden>
+              <div class="plaud-actions">
+                <button type="button" class="source-primary" id="plaud-pair">Connect iPhone bridge</button>
+                <button type="button" id="plaud-refresh">Refresh interviews</button>
+              </div>
+              <div class="plaud-pairing" id="plaud-pairing" hidden>
+                <span>One-time pairing code for the iPhone bridge</span>
+                <output id="plaud-pairing-code"></output>
+                <small id="plaud-pairing-expiry"></small>
+              </div>
+              <div id="plaud-transcriptions" class="plaud-transcriptions" aria-label="Plaud interviews"></div>
+              <section id="plaud-detail" class="plaud-detail" aria-labelledby="plaud-detail-title" hidden>
+                <div class="plaud-detail-heading"><h4 id="plaud-detail-title">Interview transcript</h4><button type="button" id="plaud-detail-close">Close transcript</button></div>
+                <p id="plaud-detail-meta" class="plaud-detail-meta"></p>
+                <p class="plaud-detail-help">Select one exact quote. Its timestamp and any available speaker label will stay with your evidence.</p>
+                <ol id="plaud-segments" class="plaud-segments"></ol>
+                <form id="plaud-evidence-form" class="plaud-evidence-form">
+                  <label for="plaud-learning">What did you learn from the person interviewed?</label>
+                  <textarea id="plaud-learning" rows="3" minlength="30" maxlength="1200" required placeholder="Describe the observed need, objection, or surprise in your own words."></textarea>
+                  <label class="plaud-confirm"><input id="plaud-confirm-real" type="checkbox" required /><span>I confirm this was a real field interview, that I can use its recording, and that the selected quote matches what was said.</span></label>
+                  <button type="submit" class="source-primary" id="plaud-validate">Add to field observations</button>
+                  <p class="plaud-evidence-help" id="plaud-evidence-help">A transcript alone does not award progress. You choose a quote and confirm the learning.</p>
+                </form>
+              </section>
+            </div>
+            <p class="source-status" id="plaud-status" role="status" aria-live="polite"></p>
           </section>
 
           <section class="source-section" aria-labelledby="github-source-title">

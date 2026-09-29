@@ -272,6 +272,10 @@ export function registerAccountDeletionHook(hook) {
   if (typeof hook !== 'function') throw new TypeError('Account deletion hook must be a function.');
   accountDeletionHook = hook;
 }
+export function labAccountExists(ownerId) {
+  return typeof ownerId === 'string' && !deletingAccounts.has(ownerId) &&
+    store.accounts.some((account) => account.id === ownerId);
+}
 export function projectForLabSession(req) {
   const { account } = accountFor(req);
   const memory = normalizeProjectMemory(account.projectMemory);
