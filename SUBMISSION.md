@@ -1,10 +1,10 @@
 # BUEELD — AI Conference Hack Day submission draft
 
-**Status:** Local implementation in progress on 29 September 2026. This file is a draft, not evidence of a completed submission, public deployment, or live Crusoe call.
+**Status:** Local implementation with a verified Crusoe chat call on 29 September 2026. This file is a draft, not evidence of a completed submission or public deployment.
 
 **One-line pitch:** BUEELD turns a founder's next question into a mission with a visible maturity gain, then helps collect real evidence and choose what to do next.
 
-**Sponsor technology:** Crusoe Foundry Serverless Inference via its OpenAI-compatible Chat Completions endpoint. The server-side adapter supports Lia chat and analysis; the new interest-test review interprets a fixed snapshot of actual responses after the founder closes the test. The app calculates counts and maturity points itself. Model configured initially: `deepseek-ai/DeepSeek-V4-Flash`. Confirm the model and key with a real request before making a live-use claim.
+**Sponsor technology:** Crusoe Foundry Serverless Inference via its OpenAI-compatible Chat Completions endpoint. The server-side adapter supports Lia chat and analysis; the new interest-test review interprets a fixed snapshot of actual responses after the founder closes the test. The app calculates counts and maturity points itself. The configured model is `deepseek-ai/Deepseek-V4-Flash`. A real local chat API request returned a response and token usage from that model.
 
 ## What was built for 29 September
 
@@ -33,7 +33,7 @@ Use a clearly labelled demo response if no genuine participants have answered. D
 | GitHub repository | [Private BUEELD Hack Day repository](https://github.com/MaximeGillot5/bueeld-crusoe-hackday), first edition commit `a3a8feb` pushed on 29 September |
 | Judges' repository access | Pending |
 | Independent live application URL | Pending |
-| Actual Crusoe request and returned model | Pending |
+| Actual Crusoe request and returned model | Verified locally on 29 September: chat API returned `source: crusoe`, model `deepseek-ai/Deepseek-V4-Flash`, and 1,420 total tokens on an isolated test project |
 | End-to-end external-browser experiment | Pending |
 | Persistence after restart or deployment | Pending |
 | Demo video or pitch recording | Pending |
@@ -43,4 +43,4 @@ The event rules and award eligibility are determined by the organizers. Confirm 
 
 ## Limits to disclose
 
-The rubric defines readiness for a first pilot, not guaranteed company success. The integrated form measures stated interest, not sales or unique people. One Lab account maps to one project in this edition. Other milestones accept documented evidence but have no dedicated collection tools. The Decision canvas and OAuth connectors were inherited and are outside this demonstration; public Google/Notion OAuth has not been configured or tested. File-backed state runs on a single Node process and requires persistent storage. If Crusoe is unavailable, saved responses and aggregates remain; the AI review can be retried later.
+The rubric defines readiness for a first pilot, not guaranteed company success. The integrated form measures stated interest, not sales or unique people. One Lab account maps to one project in this edition. Other milestones accept documented evidence but have no dedicated collection tools. The Decision canvas and OAuth connectors were inherited and are outside this demonstration; public Google/Notion OAuth has not been configured or tested. File-backed state runs on a single Node process and requires persistent storage. When Crusoe explicitly reports exhausted credits, local AI requests switch to the signed-in AdaL CLI. Other Crusoe outages still require a retry; saved responses and aggregates remain.

@@ -66,6 +66,75 @@ export const MILESTONES = Object.freeze([
 ].map((item) => Object.freeze({ ...item, steps: Object.freeze(item.steps) })));
 
 const MILESTONE_BY_ID = new Map(MILESTONES.map((item) => [item.id, item]));
+const MILESTONE_QUESTIONS = Object.freeze({
+  target_problem: [
+    'Which specific customer segment are you focusing on?',
+    'What problem does this segment face? If you have not heard it directly, say that it is your hypothesis.',
+    'What is your source or reasoning for this customer and problem?',
+  ],
+  field_observations: [
+    'Which real people in your target audience did you talk to or observe?',
+    'What did they actually say or do about the problem?',
+    'Where are those observations recorded, and what did you learn?',
+  ],
+  problem_priority: [
+    'What measurable priority threshold did you set before collecting responses?',
+    'What did you observe from real people in the target audience?',
+    'How does the observed number compare with your original threshold?',
+  ],
+  value_proposition: [
+    'What change does your product promise in one sentence?',
+    'Which specific customer segment is that promise for?',
+    'What version of this proposition do you want to save?',
+  ],
+  interest_test: [
+    'What proposition and question will you put in front of real people?',
+    'Who responded, and where are their real responses recorded?',
+    'What did the responses show, and what will you change or keep?',
+  ],
+  engagement_signal: [
+    'What concrete commitment will count as engagement?',
+    'What numeric threshold did you set before testing?',
+    'What commitment did you observe, and where is it recorded?',
+  ],
+  prototype_scope: [
+    'What one essential task must the prototype enable?',
+    'What will the prototype include and leave out?',
+    'What scope decision or version should be saved?',
+  ],
+  usability_test: [
+    'Who was the real participant, and what essential task did they attempt?',
+    'What did you observe while they tried the task without guidance?',
+    'What succeeded or failed, and where are the session notes recorded?',
+  ],
+  essential_task_success: [
+    'What task-success threshold did you set before the test?',
+    'What happened when real people tried the task?',
+    'What was the observed success rate, and where is it recorded?',
+  ],
+  price_and_costs: [
+    'What price do you propose for the first pilot?',
+    'What are its main expected costs?',
+    'Which assumptions or sources support those figures?',
+  ],
+  delivery_capacity: [
+    'What single delivery unit did you measure for the pilot?',
+    'What real time, capacity, or cost result did you measure?',
+    'How was it measured, and where is the source or record?',
+  ],
+  pilot_ready: [
+    'Who will own the pilot?',
+    'What budget and feasible delivery plan will you use?',
+    'What success checks and follow-up plan will you use?',
+  ],
+});
+const DOCUMENTATION_MILESTONES = new Set([
+  'target_problem', 'value_proposition', 'prototype_scope', 'price_and_costs', 'pilot_ready',
+]);
+const OBSERVATION_MILESTONES = new Set(['field_observations', 'usability_test', 'delivery_capacity']);
+if (MILESTONES.some((item) => MILESTONE_QUESTIONS[item.id]?.length !== item.steps.length)) {
+  throw new Error('Each maturity step needs one guided question.');
+}
 if (MILESTONES.reduce((sum, item) => sum + item.weight, 0) !== 100 ||
     DIMENSIONS.some((dimension) => MILESTONES.filter((item) => item.dimension === dimension.id)
       .reduce((sum, item) => sum + item.weight, 0) !== 25)) {
@@ -145,6 +214,48 @@ function normalizeEvidence(evidence, source, outcome, milestone, preparedCriteri
 
 function projectKey(ownerId, projectId) { return `${ownerId}\u0000${projectId}`; }
 
+function minimumAnswerLength(milestoneId, stepIndex) {
+  if (milestoneId === 'target_problem') return [3, 12, 12][stepIndex];
+  if (OBSERVATION_MILESTONES.has(milestoneId)) return [8, 20, 16][stepIndex];
+  return 3;
+}
+
+// Older chat clients persisted requests for Lia's help as if they were answers.
+// Hide these drafts from progress and credit until the founder gives an answer.
+export function isGuidedHelpRequest(answer) {
+  return typeof answer === 'string' &&
+    /^(?:please\s+)?(?:help me\b|(?:can|could|would)\s+you\s+(?:help|find|research)\b|i\s+need\s+help\b|find\s+(?:me|this|that|it)\b)/i.test(answer.trim());
+}
+
+function guidedDraft(project, milestone) {
+  const storedDraft = project?.drafts?.[milestone.id];
+  const stored = storedDraft?.answers;
+  const answers = milestone.steps.map((_, index) =>
+    typeof stored?.[index] === 'string' && !isGuidedHelpRequest(stored[index]) ? stored[index] : '');
+  const reviewed = milestone.steps.map((_, index) =>
+    Boolean(answers[index] && storedDraft?.reviewed?.[index] === true));
+  const answeredCount = answers.filter((answer, index) =>
+    reviewed[index] && answer.trim().length >= minimumAnswerLength(milestone.id, index)).length;
+  return { answers, reviewed, answeredCount, totalSteps: milestone.steps.length,
+    complete: answeredCount === milestone.steps.length };
+}
+
+function guidedEvidenceType(milestoneId) {
+  if (DOCUMENTATION_MILESTONES.has(milestoneId)) return 'documentation';
+  if (OBSERVATION_MILESTONES.has(milestoneId)) return 'observation';
+  if (milestoneId === 'interest_test') return 'experiment';
+  return 'metric';
+}
+
+function guidedEvidence(milestone, answers, reference = '') {
+  const summary = milestone.id === 'target_problem'
+    ? `The founder describes the customer segment as: ${answers[0]}\n` +
+      `The founder describes their problem as: ${answers[1]}\n` +
+      `The founder gives this source or reasoning: ${answers[2]}`
+    : milestone.steps.map((step, index) => `${step} ${answers[index]}`).join('\n');
+  return { summary, reference: reference.slice(0, 500), real: true };
+}
+
 function score(project) {
   const active = new Set(project?.credits?.filter((item) => !item.revokedAt).map((item) => item.milestoneId) || []);
   return MILESTONES.reduce((total, item) => total + (active.has(item.id) ? item.weight : 0), 0);
@@ -159,6 +270,8 @@ function snapshot(project, ownerId, projectId, projectName = '', projectSummary 
       id: item.id, dimension: item.dimension, dimensionId: item.dimension,
       title: item.title, description: item.description,
       weight: item.weight, criterion: item.criterion, steps: [...item.steps],
+      questions: [...MILESTONE_QUESTIONS[item.id]], draft: guidedDraft(project, item),
+      guidedEvidenceType: guidedEvidenceType(item.id),
       status: credit ? 'validated' : 'pending', validated: Boolean(credit),
       plannedCriterion: project?.criteria?.[item.id] || null,
       evidence: credit ? structuredClone(credit.evidence) : null,
@@ -189,6 +302,9 @@ function snapshot(project, ownerId, projectId, projectName = '', projectSummary 
     nextMission: next ? {
       id: next.id, milestoneId: next.id, gain: next.weight, title: next.title,
       description: next.description, status: 'available', steps: [...next.steps],
+      questions: [...next.questions], draft: structuredClone(next.draft),
+      guidedEvidenceType: next.guidedEvidenceType,
+      plannedCriterion: next.plannedCriterion,
       criterion: next.criterion, cta: 'Start mission',
     } : {
       id: 'launch_pilot', milestoneId: null, gain: 0, title: 'Launch the pilot',
@@ -266,7 +382,7 @@ export function createMaturityStore({ dataDir = process.env.LAB_DATA_DIR || join
       if (current.projects.length >= 500) throw fail(429, 'Project limit reached.');
       project = { id: projectId, ownerId, name: projectName || 'My project',
         summary: projectSummary || '', roadmapVersion: ROADMAP_VERSION, credits: [],
-        criteria: {}, history: [] };
+        criteria: {}, drafts: {}, history: [] };
       current.projects.push(project);
     }
     if (project.roadmapVersion !== ROADMAP_VERSION) throw fail(409, 'Project roadmap needs migration.');
@@ -320,6 +436,97 @@ export function createMaturityStore({ dataDir = process.env.LAB_DATA_DIR || join
       return snapshot(locate(store, ownerId, projectId), ownerId, projectId,
         optionalText(projectName, 120, 'project name'), optionalText(projectSummary, 1000, 'project summary'));
     },
+    saveGuidedAnswer({ ownerId, projectId, milestoneId, stepIndex, answer, reviewed = false,
+      projectName, projectSummary }) {
+      ownerId = identifier(ownerId, 'owner ID');
+      projectId = identifier(projectId, 'project ID');
+      milestoneId = identifier(milestoneId, 'milestone ID');
+      const milestone = MILESTONE_BY_ID.get(milestoneId);
+      if (!milestone) throw fail(404, 'Unknown milestone.');
+      if (!Number.isInteger(stepIndex) || stepIndex < 0 || stepIndex >= milestone.steps.length) {
+        throw fail(400, 'Choose a valid mission question.');
+      }
+      if (typeof answer !== 'string' || answer.length > 700) {
+        throw fail(400, 'Keep this mission answer within 700 characters.');
+      }
+      if (typeof reviewed !== 'boolean') throw fail(400, 'Invalid answer review state.');
+      if (isGuidedHelpRequest(answer)) {
+        throw fail(400, 'Ask Lia for help in the mission chat; that request cannot be saved as an answer.');
+      }
+      const minimum = minimumAnswerLength(milestoneId, stepIndex);
+      if (answer.trim() && answer.trim().length < minimum) {
+        throw fail(400, `Give a more specific answer (at least ${minimum} characters).`);
+      }
+      return mutate((draft) => {
+        const project = ensure(draft, ownerId, projectId,
+          optionalText(projectName, 120, 'project name'),
+          optionalText(projectSummary, 1000, 'project summary'));
+        if (project.credits.some((item) => item.milestoneId === milestoneId && !item.revokedAt)) {
+          throw fail(409, 'This mission is already completed.');
+        }
+        if (milestone.metric && stepIndex > 0 && !project.criteria?.[milestoneId]) {
+          throw fail(409, 'Fix the numeric criterion before recording observations for this mission.');
+        }
+        project.drafts ||= {};
+        const prior = guidedDraft(project, milestone);
+        const reviewedAnswer = reviewed && Boolean(answer.trim());
+        if (prior.answers[stepIndex] === answer && prior.reviewed[stepIndex] === reviewedAnswer) {
+          return { changed: false, value: snapshot(project, ownerId, projectId) };
+        }
+        const answers = [...prior.answers];
+        const reviewedAnswers = [...prior.reviewed];
+        answers[stepIndex] = answer;
+        reviewedAnswers[stepIndex] = reviewedAnswer;
+        project.drafts[milestoneId] = { answers, reviewed: reviewedAnswers, updatedAt: new Date().toISOString() };
+        return { changed: true, value: snapshot(project, ownerId, projectId) };
+      });
+    },
+    completeGuidedMission({ ownerId, projectId, milestoneId, confirmed, requestId,
+      observed, experimentEvidence, projectName, projectSummary }) {
+      ownerId = identifier(ownerId, 'owner ID');
+      projectId = identifier(projectId, 'project ID');
+      milestoneId = identifier(milestoneId, 'milestone ID');
+      const milestone = MILESTONE_BY_ID.get(milestoneId);
+      if (!milestone) throw fail(404, 'Unknown milestone.');
+      if (confirmed !== true) throw fail(400, 'Confirm the mission answers before completing it.');
+      return mutate((draft) => {
+        const project = ensure(draft, ownerId, projectId,
+          optionalText(projectName, 120, 'project name'),
+          optionalText(projectSummary, 1000, 'project summary'));
+        const base = { ownerId, projectId, milestoneId, requestId, projectName, projectSummary };
+        if (project.credits.some((item) => item.milestoneId === milestoneId && !item.revokedAt)) {
+          return credit(draft, base);
+        }
+        const progress = guidedDraft(project, milestone);
+        if (!progress.complete) {
+          throw fail(409, 'Answer every mission question in the chat before confirming it.');
+        }
+        const answers = progress.answers;
+        if (milestone.metric) {
+          const criterion = project.criteria?.[milestoneId]?.criterion;
+          if (!criterion) throw fail(409, 'Fix the numeric criterion before measuring this mission.');
+          if (typeof observed !== 'number' || !Number.isFinite(observed)) {
+            throw fail(409, 'Enter the observed numeric result before completing this mission.');
+          }
+          return credit(draft, { ...base,
+            evidence: { ...guidedEvidence(milestone, answers, answers[2]),
+              criterion, observed },
+            source: { kind: 'manual' }, outcome: 'met' });
+        }
+        if (milestoneId === 'interest_test') {
+          if (!experimentEvidence || experimentEvidence.source?.kind !== 'experiment') {
+            throw fail(409, 'Run and analyze a real interest test, then link the completed experiment.');
+          }
+          return credit(draft, { ...base, evidence: experimentEvidence.evidence,
+            source: experimentEvidence.source, outcome: experimentEvidence.outcome });
+        }
+        const reference = milestoneId === 'target_problem' || OBSERVATION_MILESTONES.has(milestoneId)
+          ? answers[2] : '';
+        return credit(draft, { ...base,
+          evidence: guidedEvidence(milestone, answers, reference),
+          source: { kind: 'manual' }, outcome: 'met' });
+      });
+    },
     setCriterion({ ownerId, projectId, milestoneId, criterion, projectName, projectSummary }) {
       ownerId = identifier(ownerId, 'owner ID');
       projectId = identifier(projectId, 'project ID');
@@ -337,6 +544,11 @@ export function createMaturityStore({ dataDir = process.env.LAB_DATA_DIR || join
             throw fail(409, 'A criterion is already fixed for this milestone.');
           }
           return { changed: false, value: snapshot(project, ownerId, projectId) };
+        }
+        const existingAnswers = project.drafts?.[milestoneId]?.answers;
+        if (Array.isArray(existingAnswers) && existingAnswers.slice(1).some((answer) =>
+          typeof answer === 'string' && answer.trim())) {
+          throw fail(409, 'This mission already has recorded observations. Start a new measurement before fixing its criterion.');
         }
         if (project.credits.some((item) => item.milestoneId === milestoneId && !item.revokedAt)) {
           throw fail(409, 'This milestone is already validated.');

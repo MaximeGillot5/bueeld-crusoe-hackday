@@ -25,7 +25,7 @@ services:
       - key: CRUSOE_API_KEY
         sync: false
       - key: CRUSOE_MODEL
-        value: deepseek-ai/DeepSeek-V4-Flash
+        value: deepseek-ai/Deepseek-V4-Flash
       - key: MAX_AI_CALLS
         value: "100"
       - key: MAX_AI_CALLS_PER_USER

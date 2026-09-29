@@ -162,7 +162,9 @@ function normalizeMessage(value) {
     throw fail(400, 'Conversation contains an invalid message.');
   }
   return { id: value.id, role: value.role, content: value.content, at: value.at,
-    status: value.status === 'pending' ? 'failed' : value.status };
+    status: value.status === 'pending' ? 'failed' : value.status,
+    ...(value.role === 'assistant' && ['crusoe', 'adal'].includes(value.provider)
+      ? { provider: value.provider } : {}) };
 }
 function normalizePinned(value) {
   if (value === undefined || value === null) return null;

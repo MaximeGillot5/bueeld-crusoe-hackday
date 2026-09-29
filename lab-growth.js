@@ -21,9 +21,9 @@ function memoryHasContent(value = projectMemory) {
 
 function renderProjectMemory(fill = false) {
   if (!$("project-memory-panel")) return;
-  $("project-memory-summary").textContent = memoryHasContent()
-    ? "What Lia knows · " + (projectMemory.project || projectMemory.target || "Your project").slice(0, 48)
-    : "What Lia knows · Add project context";
+  $("project-memory-detail").textContent = memoryHasContent()
+    ? (projectMemory.project || projectMemory.target || "Your project").slice(0, 48)
+    : "Add project context";
   if (fill && !memoryDraftDirty) for (const field of MEMORY_FIELDS) $("memory-" + field).value = projectMemory[field];
   $("memory-save").disabled = !accountReady || memorySaving;
   $("memory-save").textContent = memorySaving ? "Saving…" : "Save context";
@@ -172,7 +172,7 @@ async function reviewMissionResult() {
       projectMemory: cleanProjectMemory(projectMemory)
     });
     const learning = cleanMissionLearning(data.learning);
-    if (data.source !== "crusoe" || !learning) throw new Error("Lia's review was incomplete. Try again; your result is still saved.");
+    if (!["crusoe", "adal"].includes(data.source) || !learning) throw new Error("Lia's review was incomplete. Try again; your result is still saved.");
     if (generation !== workspaceGeneration || !missionTracker.records.includes(record) || record.status !== "completed" || recordVersion !== JSON.stringify([record.content, record.evidence, record.outcome, record.realEvidence])) return;
     if (record.outcome !== "met" && learning.recommendation === "continue") throw new Error("The review did not account for your result. Please retry.");
     record.learning = learning;

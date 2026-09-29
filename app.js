@@ -383,7 +383,7 @@ async function generatePlan(event) {
     if (state.brief.trim() !== brief || state.evidence.trim() !== evidence) {
       throw new Error("The context changed while Lia was working. Generate a new plan for the latest brief.");
     }
-    if (data.source !== "crusoe" || !isPlan(data.plan) || typeof data.planId !== "string" || !data.planId) {
+    if (!["crusoe", "adal"].includes(data.source) || !isPlan(data.plan) || typeof data.planId !== "string" || !data.planId) {
       throw new Error("Lia returned an incomplete plan. Please try again.");
     }
     state.plan = data.plan;
@@ -519,7 +519,7 @@ async function reassess(event) {
     if (!state.approved || state.planId !== snapshot.planId || state.chosenOption !== snapshot.chosenOption || state.plan.recommendedExperiment.threshold !== snapshot.threshold || state.plan.recommendedExperiment.comparison !== snapshot.comparison || state.result.value.trim() !== raw || state.result.notes.trim() !== snapshot.notes) {
       throw new Error("The approved choice, bar, or result changed while Lia was working. Reassess the latest version.");
     }
-    if (data.source !== "crusoe" || !isReview(data.review) || typeof data.metThreshold !== "boolean") {
+    if (!["crusoe", "adal"].includes(data.source) || !isReview(data.review) || typeof data.metThreshold !== "boolean") {
       throw new Error("Lia returned an incomplete assessment. Please try again.");
     }
     const { threshold, comparison } = state.plan.recommendedExperiment;
@@ -1325,6 +1325,8 @@ function handleSourceRemove(event) {
 function discussSelectedSources() {
   if (sourceBusy || chatBusy || !selectedSourceEntries().length) return;
   closeSources();
+  window.BUILDHome?.selectView("lia");
+  history.replaceState(null, "", "#lia");
   $("open-sources").focus();
   submitChatMessage("Using the project source summaries I selected, separate observed facts from assumptions, identify the riskiest gap, and propose one small next mission with expected evidence. Do not invent outcomes or claim an external action was completed.");
 }
@@ -1337,6 +1339,578 @@ const CHAT_LIMIT = 1500;
 const CHAT_REQUEST_BUDGET_BYTES = 28000;
 const EVIDENCE_PREFIX = "Evidence for our pinned mission: ";
 let chatBusy = false;
+
+// Readiness milestones belong to the project. They are deliberately separate
+// from the per-conversation, founder-pinned Lab XP missions below.
+const READINESS_GUIDE_KEY = "bueeld-readiness-guided-mission-v1";
+const READINESS_PAUSED_KEY = "bueeld-readiness-guided-paused-v1";
+const READINESS_TURNS_KEY = "bueeld-readiness-ai-turns-v1";
+let readinessSnapshot = null;
+let readinessMissionId = null;
+let readinessPaused = false;
+let readinessEditIndex = null;
+let readinessBusy = false;
+let readinessAnalyzing = false;
+let readinessStatus = "";
+let readinessStatusError = false;
+let readinessCompletion = null;
+let readinessRequestId = null;
+let readinessHeldComposer = "";
+let readinessHeldConversationId = null;
+let readinessComposerDrafts = new Map();
+let readinessEditDrafts = new Map();
+let readinessTurns = [];
+let readinessExperiments = [];
+let readinessExperimentsFetched = false;
+let readinessExperimentsLoading = false;
+let readinessExperimentId = "";
+
+function readinessMilestone(id = readinessMissionId) {
+  return readinessSnapshot?.maturity?.milestones?.find((item) => item.id === id) || null;
+}
+
+function readinessGuideActive() {
+  return Boolean(accountSession.authenticated && readinessMissionId && readinessMilestone());
+}
+
+function rememberReadinessGuide() {
+  if (!accountSession.authenticated) return;
+  try {
+    if (readinessMissionId) localStorage.setItem(currentStorageKey(READINESS_GUIDE_KEY), readinessMissionId);
+    else localStorage.removeItem(currentStorageKey(READINESS_GUIDE_KEY));
+    if (readinessPaused) localStorage.setItem(currentStorageKey(READINESS_PAUSED_KEY), "1");
+    else localStorage.removeItem(currentStorageKey(READINESS_PAUSED_KEY));
+  } catch { /* The server still preserves answers. */ }
+}
+
+function loadReadinessTurns() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(currentStorageKey(READINESS_TURNS_KEY)) || "[]");
+    if (!Array.isArray(saved)) return [];
+    return saved.filter((turn) => turn && typeof turn.missionId === "string" &&
+      Number.isInteger(turn.stepIndex) && turn.stepIndex >= 0 && turn.stepIndex < 3 &&
+      typeof turn.input === "string" && turn.input.length <= 700 &&
+      typeof turn.reply === "string" && turn.reply.length <= 700 &&
+      ["saved", "continue"].includes(turn.outcome) && Number.isFinite(turn.at)).slice(-60);
+  } catch { return []; }
+}
+
+function persistReadinessTurns() {
+  try { localStorage.setItem(currentStorageKey(READINESS_TURNS_KEY), JSON.stringify(readinessTurns.slice(-60))); }
+  catch { /* Mission answers remain on the server even if local chat history is unavailable. */ }
+}
+
+function restoreReadinessGuide() {
+  readinessSnapshot = null;
+  readinessMissionId = null;
+  readinessPaused = false;
+  readinessEditIndex = null;
+  readinessBusy = false;
+  readinessAnalyzing = false;
+  readinessStatus = "";
+  readinessStatusError = false;
+  readinessCompletion = null;
+  readinessRequestId = null;
+  readinessHeldComposer = "";
+  readinessHeldConversationId = null;
+  readinessComposerDrafts = new Map();
+  readinessEditDrafts = new Map();
+  readinessTurns = accountSession.authenticated ? loadReadinessTurns() : [];
+  readinessExperiments = [];
+  readinessExperimentsFetched = false;
+  readinessExperimentsLoading = false;
+  readinessExperimentId = "";
+  renderSavedProjectFacts();
+  $("project-memory-panel").open = false;
+  if (!accountSession.authenticated) return;
+  try {
+    readinessMissionId = localStorage.getItem(currentStorageKey(READINESS_GUIDE_KEY)) || null;
+    readinessPaused = localStorage.getItem(currentStorageKey(READINESS_PAUSED_KEY)) === "1";
+  } catch { /* A saved draft will resume from the maturity snapshot. */ }
+}
+
+function setReadinessStatus(message, error = false) {
+  readinessStatus = message;
+  readinessStatusError = error;
+  const status = $("readiness-chat-status");
+  if (status) {
+    status.textContent = message;
+    status.classList.toggle("is-error", error);
+  }
+}
+
+function readinessQuestionIndex(milestone) {
+  const questions = Array.isArray(milestone?.questions) ? milestone.questions : [];
+  if (Number.isInteger(readinessEditIndex) && readinessEditIndex >= 0 && readinessEditIndex < questions.length) return readinessEditIndex;
+  const answers = Array.isArray(milestone?.draft?.answers) ? milestone.draft.answers : [];
+  const reviewed = Array.isArray(milestone?.draft?.reviewed) ? milestone.draft.reviewed : [];
+  return questions.findIndex((_, index) => !answers[index]?.trim() || reviewed[index] !== true);
+}
+
+function prefillUnreviewedReadinessAnswer(milestone) {
+  if (!milestone) return;
+  const index = readinessQuestionIndex(milestone);
+  if (index < 0 || $("chat-input").value.trim() || milestone.draft?.reviewed?.[index] === true) return;
+  $("chat-input").value = milestone.draft?.answers?.[index] || "";
+}
+
+function syncReadinessSnapshot(data) {
+  readinessSnapshot = data;
+  renderSavedProjectFacts();
+  if (!accountSession.authenticated) {
+    readinessMissionId = null;
+    readinessCompletion = null;
+    renderReadinessMission();
+    return;
+  }
+  if (readinessCompletion) { renderReadinessMission(); return; }
+  if (readinessMissionId) {
+    const milestone = readinessMilestone();
+    if (!milestone || milestone.validated) {
+      readinessMissionId = null;
+      readinessEditIndex = null;
+      rememberReadinessGuide();
+    }
+  }
+  if (!readinessMissionId && !readinessPaused) {
+    const pending = data?.maturity?.milestones?.find((item) => !item.validated &&
+      (Number(item.draft?.answeredCount) > 0 || item.draft?.answers?.some((answer) => answer?.trim())));
+    if (pending) { readinessMissionId = pending.id; rememberReadinessGuide(); }
+  }
+  if (readinessMissionId) prefillUnreviewedReadinessAnswer(readinessMilestone());
+  renderReadinessMission();
+}
+
+function renderSavedProjectFacts() {
+  const section = $("readiness-saved-facts");
+  const list = $("readiness-saved-facts-list");
+  if (!section || !list) return;
+  const facts = accountSession.authenticated && Array.isArray(readinessSnapshot?.maturity?.milestones)
+    ? readinessSnapshot.maturity.milestones.filter((item) => Array.isArray(item.draft?.answers) && item.draft.answers.some((answer) => answer?.trim()))
+    : [];
+  section.hidden = facts.length === 0;
+  list.replaceChildren(...facts.map((milestone) => {
+    const item = el("section", "readiness-saved-fact");
+    const heading = el("div", "readiness-saved-fact-head");
+    heading.append(el("h4", "", milestone.title));
+    heading.append(el("span", "", milestone.validated
+      ? "Founder-reported · mission credited"
+      : `Founder-reported · ${milestone.draft.answeredCount}/${milestone.draft.totalSteps} reviewed`));
+    item.append(heading);
+    const entries = el("dl", "");
+    milestone.draft.answers.forEach((answer, index) => {
+      if (!answer?.trim()) return;
+      const pair = el("div", "");
+      pair.append(el("dt", "", milestone.questions?.[index] || milestone.steps?.[index] || `Step ${index + 1}`), el("dd", "", answer));
+      entries.append(pair);
+    });
+    item.append(entries);
+    if (!milestone.validated) {
+      const button = el("button", "", "Continue this mission with Lia →");
+      button.type = "button";
+      button.dataset.readinessContinue = milestone.id;
+      item.append(button);
+    }
+    return item;
+  }));
+}
+
+function applyReadinessSnapshot(data) {
+  if (window.BUILDHome?.applySnapshot) window.BUILDHome.applySnapshot(data);
+  else syncReadinessSnapshot(data);
+}
+
+function renderReadinessMission() {
+  const card = $("readiness-chat-mission");
+  if (!card) return;
+  const milestone = readinessGuideActive() ? readinessMilestone() : null;
+  const finished = readinessCompletion;
+  card.hidden = !milestone && !finished;
+  if (card.hidden) return;
+  const questions = Array.isArray(milestone?.questions) ? milestone.questions : [];
+  const answers = Array.isArray(milestone?.draft?.answers) ? milestone.draft.answers : [];
+  const total = milestone ? questions.length : finished.total;
+  const answered = milestone ? Number(milestone.draft?.answeredCount) || 0 : total;
+  $("readiness-chat-mission-title").textContent = milestone?.title || finished.title;
+  $("readiness-chat-description").textContent = milestone?.description || "Your project has moved forward. Continue with the next mission when you are ready.";
+  $("readiness-chat-gain").textContent = `${milestone?.weight ?? finished.gain ?? 0}% maturity`;
+  $("readiness-chat-count").textContent = finished ? "Mission complete" : `${answered} / ${total} reviewed`;
+  $("readiness-chat-progress").max = Math.max(1, total);
+  $("readiness-chat-progress").value = Math.min(answered, total);
+  $("readiness-chat-answers").replaceChildren(...questions.flatMap((question, index) => {
+    if (!answers[index]?.trim()) return [];
+    const reviewed = milestone.draft?.reviewed?.[index] === true;
+    const item = el("li", `readiness-chat-answer${reviewed ? "" : " is-unreviewed"}`);
+    item.append(el("strong", "", question), el("p", "", answers[index]));
+    if (!reviewed) item.append(el("span", "readiness-chat-answer-status", "Needs Lia review"));
+    const edit = el("button", "", reviewed ? "Edit answer" : "Review with Lia");
+    edit.type = "button";
+    edit.dataset.readinessEdit = String(index);
+    edit.disabled = readinessBusy;
+    item.append(edit);
+    return [item];
+  }));
+  const isMetric = milestone?.guidedEvidenceType === "metric";
+  const needsCriterion = isMetric && !milestone.plannedCriterion;
+  const questionIndex = milestone ? readinessQuestionIndex(milestone) : -1;
+  const showQuestion = Boolean(milestone && !needsCriterion && questionIndex >= 0);
+  $("readiness-chat-criterion").hidden = !needsCriterion;
+  $("readiness-chat-set-criterion").disabled = readinessBusy;
+  $("readiness-chat-question").hidden = !showQuestion;
+  if (showQuestion) $("readiness-chat-question-text").textContent = questions[questionIndex];
+  const review = Boolean(milestone?.draft?.complete && readinessEditIndex === null && !needsCriterion);
+  $("readiness-chat-review").hidden = !review;
+  $("readiness-chat-observed").hidden = !review || !isMetric;
+  $("readiness-chat-experiment-note").hidden = !review || milestone?.guidedEvidenceType !== "experiment";
+  if (review) {
+    const documentary = milestone.guidedEvidenceType === "documentation";
+    $("readiness-chat-review-copy").textContent = documentary
+      ? "Lia reviewed these project details for relevance. Confirm they reflect your real project before this milestone is credited."
+      : "Review your reported observations above. Only real work and results can advance this milestone.";
+    $("readiness-chat-confirm-copy").textContent = documentary
+      ? "I confirm these details reflect my project and are stated in my own words."
+      : "I confirm these answers describe real observations from my project.";
+    if (isMetric) {
+      const criterion = milestone.plannedCriterion?.criterion;
+      $("readiness-chat-fixed-target").textContent = criterion
+        ? `Predeclared target: ${criterion.comparison.replaceAll("_", " ")} ${criterion.threshold} ${criterion.unit}` : "";
+    }
+    if (milestone.guidedEvidenceType === "experiment") {
+      const select = $("readiness-chat-experiment-select");
+      const options = readinessExperiments.filter((item) => item.missionId === "interest_test" && item.status === "closed" && item.review);
+      const placeholder = el("option", "", readinessExperimentsLoading ? "Loading completed tests…" : "Choose a closed, analyzed test");
+      placeholder.value = "";
+      select.replaceChildren(placeholder, ...options.map((item) => {
+        const option = el("option", "", `${item.title} · ${item.responseCount || 0} responses`);
+        option.value = item.id;
+        return option;
+      }));
+      if (readinessExperimentsFetched && !readinessExperimentsLoading &&
+        !options.some((item) => item.id === readinessExperimentId)) readinessExperimentId = "";
+      select.value = readinessExperimentId;
+      select.disabled = readinessBusy || readinessExperimentsLoading;
+      $("readiness-chat-refresh-tests").disabled = readinessBusy || readinessExperimentsLoading;
+      if (!readinessExperimentsFetched && !readinessExperimentsLoading) void loadReadinessExperiments();
+    }
+  }
+  $("readiness-chat-complete").disabled = readinessBusy || !review || !$("readiness-chat-confirm").checked ||
+    (milestone?.guidedEvidenceType === "experiment" && !readinessExperimentId);
+  $("readiness-chat-finished").hidden = !finished;
+  if (finished) {
+    $("readiness-chat-finished-text").textContent = `Your ${finished.title} mission is complete. Project maturity moved from ${finished.before}% to ${finished.after}%.${finished.nextMission?.title ? ` Next: ${finished.nextMission.title}.` : ""}`;
+    $("readiness-chat-next").hidden = !finished.nextMission || finished.nextMission.id === "launch_pilot";
+  }
+  const tool = $("readiness-chat-tool");
+  tool.hidden = !milestone || !["experiment", "metric"].includes(milestone.guidedEvidenceType);
+  if (!tool.hidden) tool.textContent = milestone.guidedEvidenceType === "experiment"
+    ? "Open public interest test tool →" : milestone.plannedCriterion ? "View mission thresholds →" : "Set a threshold above before answering";
+  tool.disabled = readinessBusy || (isMetric && !milestone.plannedCriterion);
+  $("readiness-chat-actions").hidden = !milestone;
+  $("readiness-chat-pause").disabled = readinessBusy;
+  $("readiness-chat-status").textContent = readinessStatus;
+  $("readiness-chat-status").classList.toggle("is-error", readinessStatusError);
+}
+
+function renderReadinessConversation(list) {
+  const milestone = readinessGuideActive() ? readinessMilestone() : null;
+  if (!milestone) return;
+  const questions = Array.isArray(milestone.questions) ? milestone.questions : [];
+  const answers = Array.isArray(milestone.draft?.answers) ? milestone.draft.answers : [];
+  const bubble = (role, content, provider) => {
+    const row = el("li", `chat-message is-${role} is-readiness`);
+    const body = el("div", "message-body");
+    if (role === "assistant") {
+      const line = el("div", "message-byline");
+      line.append(el("strong", "", "Lia · project mission"));
+      if (["crusoe", "adal"].includes(provider)) line.append(el("span", "message-provider", provider === "crusoe" ? "via Crusoe" : "via AdaL fallback"));
+      body.append(line);
+    }
+    body.append(el("p", "message-content", content));
+    row.append(body);
+    return row;
+  };
+  const index = readinessQuestionIndex(milestone);
+  const needsCriterion = milestone.guidedEvidenceType === "metric" && !milestone.plannedCriterion;
+  questions.forEach((question, stepIndex) => {
+    const answer = milestone.draft?.reviewed?.[stepIndex] === true ? answers[stepIndex]?.trim() : "";
+    const turns = readinessTurns.filter((turn) => turn.missionId === milestone.id && turn.stepIndex === stepIndex);
+    if (!answer && (needsCriterion || stepIndex !== index) && !turns.length) return;
+    list.append(bubble("assistant", question));
+    for (const turn of turns) list.append(bubble("user", turn.input), bubble("assistant", turn.reply, turn.provider));
+    if (answer && !turns.some((turn) => turn.outcome === "saved" && turn.input.trim() === answer)) {
+      list.append(bubble("user", answer));
+    }
+  });
+  if (needsCriterion) {
+    list.append(bubble("assistant", "Before we collect a result, let's set the numeric threshold that would count as success. Use the mission card below."));
+  } else if (milestone.draft?.complete && !readinessTurns.some((turn) => turn.missionId === milestone.id && turn.outcome === "saved" && turn.stepIndex === questions.length - 1)) {
+    list.append(bubble("assistant", "Thanks. Your answers are saved with the project. Review them in the mission card and confirm when they reflect your real work."));
+  }
+}
+
+async function loadReadinessExperiments() {
+  if (!accountSession.authenticated || readinessExperimentsLoading) return;
+  const userId = accountSession.user?.id;
+  const generation = workspaceGeneration;
+  readinessExperimentsLoading = true;
+  renderReadinessMission();
+  try {
+    const data = await accountApi("GET", "/api/experiments");
+    if (userId !== accountSession.user?.id || generation !== workspaceGeneration) return;
+    readinessExperiments = Array.isArray(data.experiments) ? data.experiments : [];
+    readinessExperimentsFetched = true;
+    const eligible = readinessExperiments.some((item) => item.missionId === "interest_test" && item.status === "closed" && item.review);
+    if (!eligible) setReadinessStatus("No analyzed public test is ready yet. Open the test tool below, then refresh this list.");
+  } catch (error) {
+    if (userId === accountSession.user?.id && generation === workspaceGeneration) {
+      readinessExperimentsFetched = true;
+      setReadinessStatus(error.message || "Could not load your tests. Try Refresh tests.", true);
+    }
+  } finally {
+    if (userId === accountSession.user?.id && generation === workspaceGeneration) {
+      readinessExperimentsLoading = false;
+      renderReadinessMission();
+    }
+  }
+}
+
+async function startReadinessMission(missionId) {
+  if (!accountSession.authenticated) { $("open-account")?.click(); return; }
+  if (readinessBusy) return;
+  const userId = accountSession.user?.id;
+  const generation = workspaceGeneration;
+  if (!readinessSnapshot) {
+    try {
+      const data = await accountApi("GET", "/api/projects/current/maturity");
+      if (userId !== accountSession.user?.id || generation !== workspaceGeneration) return;
+      applyReadinessSnapshot(data);
+    } catch (error) { setChatStatus(error.message || "Mission progress could not be loaded.", true); return; }
+  }
+  const id = String(missionId || readinessSnapshot?.nextMission?.id || "");
+  const milestone = readinessMilestone(id);
+  if (!milestone || milestone.validated) {
+    setChatStatus("This mission is already complete. Return to Project to open your next mission.");
+    return;
+  }
+  const previousMissionId = readinessMissionId;
+  if (previousMissionId && previousMissionId !== id) {
+    readinessComposerDrafts.set(previousMissionId, $("chat-input").value);
+    readinessEditDrafts.set(previousMissionId, readinessEditIndex);
+    $("chat-input").value = readinessComposerDrafts.get(id) || "";
+  } else if (!readinessMissionId) {
+    if ($("chat-input").value.trim()) {
+      readinessHeldComposer = $("chat-input").value;
+      readinessHeldConversationId = activeConversationId;
+    }
+    $("chat-input").value = readinessComposerDrafts.get(id) || "";
+  }
+  readinessMissionId = id;
+  readinessPaused = false;
+  readinessCompletion = null;
+  if (previousMissionId !== id) readinessEditIndex = readinessEditDrafts.get(id) ?? null;
+  readinessRequestId = null;
+  $("readiness-chat-confirm").checked = false;
+  $("readiness-chat-observed-value").value = "";
+  readinessExperimentsFetched = false;
+  readinessExperimentId = "";
+  onboarding.active = false;
+  $("project-memory-panel").open = false;
+  prefillUnreviewedReadinessAnswer(milestone);
+  rememberReadinessGuide();
+  const hasUnreviewed = milestone.draft?.answers?.some((answer, index) =>
+    answer?.trim() && milestone.draft?.reviewed?.[index] !== true);
+  setReadinessStatus(hasUnreviewed
+    ? "Your earlier answers are still here. Send each one to Lia for review before completing the mission."
+    : Number(milestone.draft?.answeredCount) > 0
+      ? "Your reviewed answers are here. Continue with Lia or edit an answer before confirming."
+      : "Lia will review each reply, help when needed, and save only an answer to the current question.");
+  window.BUILDHome?.selectView("lia", { focus: true });
+  history.replaceState(null, "", "#lia");
+  renderChat(true);
+  $(milestone.guidedEvidenceType === "metric" && !milestone.plannedCriterion ? "readiness-chat-threshold"
+    : readinessQuestionIndex(milestone) >= 0 ? "chat-input" : "readiness-chat-confirm")?.focus();
+}
+
+function pauseReadinessMission() {
+  if (!readinessGuideActive() || readinessBusy) return;
+  readinessComposerDrafts.set(readinessMissionId, $("chat-input").value);
+  readinessEditDrafts.set(readinessMissionId, readinessEditIndex);
+  $("chat-input").value = "";
+  readinessMissionId = null;
+  readinessPaused = true;
+  readinessEditIndex = null;
+  readinessRequestId = null;
+  rememberReadinessGuide();
+  if (!$("chat-input").value.trim() && readinessHeldComposer && readinessHeldConversationId === activeConversationId) {
+    $("chat-input").value = readinessHeldComposer;
+  }
+  readinessHeldComposer = "";
+  readinessHeldConversationId = null;
+  renderChat();
+  setChatStatus("Mission paused. Chat freely with Lia; return to Project to continue your saved mission.");
+  $("chat-input").focus();
+}
+
+async function submitReadinessAnswer() {
+  const milestone = readinessMilestone();
+  if (!milestone || readinessBusy || chatBusy || sourceBusy) return;
+  if (milestone.guidedEvidenceType === "metric" && !milestone.plannedCriterion) {
+    setReadinessStatus("Set the success threshold above before recording observations.", true);
+    $("readiness-chat-threshold").focus();
+    return;
+  }
+  const stepIndex = readinessQuestionIndex(milestone);
+  if (stepIndex < 0) {
+    setReadinessStatus("Review your saved answers and confirm the mission above.");
+    $("readiness-chat-confirm").focus();
+    return;
+  }
+  if (pendingAttachment) {
+    setReadinessStatus("Analyze or remove the attached file before sending a mission answer.", true);
+    return;
+  }
+  const answer = $("chat-input").value.trim();
+  if (!answer) { $("chat-input").focus(); return; }
+  if (answer.length > 700) {
+    setReadinessStatus("Keep each mission answer within 700 characters.", true);
+    $("chat-input").focus();
+    return;
+  }
+  const userId = accountSession.user?.id;
+  const generation = workspaceGeneration;
+  const missionId = milestone.id;
+  readinessBusy = true;
+  readinessAnalyzing = true;
+  setReadinessStatus("Lia is analyzing your message…");
+  renderChat(true);
+  try {
+    const history = readinessTurns.filter((turn) => turn.missionId === missionId && turn.stepIndex === stepIndex)
+      .slice(-4).map(({ input, reply }) => ({ input, reply }));
+    const data = await accountApi("POST", `/api/projects/current/milestones/${encodeURIComponent(missionId)}/turn`, { stepIndex, message: answer, history });
+    if (userId !== accountSession.user?.id || generation !== workspaceGeneration || readinessMissionId !== missionId) return;
+    if (!["saved", "continue"].includes(data?.outcome) || !["crusoe", "adal"].includes(data.source) || typeof data.reply !== "string" || !data.reply.trim() ||
+        (data.outcome === "saved" && !data.snapshot?.maturity)) {
+      throw new Error("Lia returned an incomplete mission review. Your message is still here; retry it.");
+    }
+    readinessTurns.push({ missionId, stepIndex, input: answer, reply: data.reply.trim().slice(0, 700),
+      outcome: data.outcome, provider: data.source, at: Date.now() });
+    readinessTurns = readinessTurns.slice(-60);
+    persistReadinessTurns();
+    $("chat-input").value = "";
+    if (data.outcome === "saved") {
+      readinessComposerDrafts.delete(missionId);
+      readinessEditDrafts.delete(missionId);
+      readinessEditIndex = null;
+      readinessRequestId = null;
+      $("readiness-chat-confirm").checked = false;
+      setReadinessStatus(data.snapshot.maturity.milestones?.find((item) => item.id === missionId)?.draft?.complete
+        ? "Lia reviewed all answers. Confirm them only if they reflect your real project."
+        : "Lia reviewed and saved your answer. The next question is ready.");
+      applyReadinessSnapshot(data.snapshot);
+      prefillUnreviewedReadinessAnswer(readinessMilestone());
+    } else {
+      setReadinessStatus("Lia replied. This message was not saved as a mission answer.");
+      renderChat(true);
+    }
+    scrollChatToLatest();
+  } catch (error) {
+    if (userId === accountSession.user?.id && generation === workspaceGeneration) {
+      setReadinessStatus(error.message || "Lia could not analyze this message. Your text is still here; retry sending it.", true);
+    }
+  } finally {
+    if (userId === accountSession.user?.id && generation === workspaceGeneration) {
+      readinessBusy = false;
+      readinessAnalyzing = false;
+      renderChat();
+      if (readinessGuideActive() && !readinessMilestone()?.draft?.complete) $("chat-input").focus();
+    }
+  }
+}
+
+async function setReadinessCriterion(event) {
+  event.preventDefault();
+  const milestone = readinessMilestone();
+  if (!milestone || milestone.guidedEvidenceType !== "metric" || milestone.plannedCriterion || readinessBusy) return;
+  const threshold = Number($("readiness-chat-threshold").value);
+  const unit = $("readiness-chat-unit").value.trim();
+  if (!Number.isFinite(threshold) || !$("readiness-chat-threshold").value.trim() || !unit) {
+    setReadinessStatus("Enter a numeric target and its unit before continuing.", true);
+    return;
+  }
+  const criterion = { comparison: $("readiness-chat-comparison").value, threshold, unit };
+  const userId = accountSession.user?.id;
+  const generation = workspaceGeneration;
+  const missionId = milestone.id;
+  readinessBusy = true;
+  setReadinessStatus("Fixing the success threshold before the test…");
+  renderReadinessMission();
+  try {
+    const data = await accountApi("POST", `/api/projects/current/milestones/${encodeURIComponent(missionId)}/criterion`, { criterion });
+    if (userId !== accountSession.user?.id || generation !== workspaceGeneration || readinessMissionId !== missionId) return;
+    setReadinessStatus("Threshold saved. Lia can now guide the mission questions.");
+    applyReadinessSnapshot(data);
+    $("chat-input").focus();
+  } catch (error) {
+    if (userId === accountSession.user?.id && generation === workspaceGeneration) setReadinessStatus(error.message || "The threshold could not be saved. Try again.", true);
+  } finally {
+    if (userId === accountSession.user?.id && generation === workspaceGeneration) { readinessBusy = false; renderChat(); }
+  }
+}
+
+async function completeReadinessMission() {
+  const milestone = readinessMilestone();
+  if (!milestone || !milestone.draft?.complete || readinessBusy || !$("readiness-chat-confirm").checked) return;
+  const payload = { confirmed: true, requestId: readinessRequestId || crypto.randomUUID() };
+  readinessRequestId = payload.requestId;
+  if (milestone.guidedEvidenceType === "metric") {
+    const input = $("readiness-chat-observed-value");
+    const observed = Number(input.value);
+    if (!input.value.trim() || !Number.isFinite(observed)) {
+      setReadinessStatus("Enter the numeric result you actually observed.", true);
+      input.focus();
+      return;
+    }
+    payload.observed = observed;
+  }
+  if (milestone.guidedEvidenceType === "experiment") {
+    if (!readinessExperimentId) { setReadinessStatus("Choose a closed, analyzed public test before confirming.", true); return; }
+    payload.experimentId = readinessExperimentId;
+  }
+  const userId = accountSession.user?.id;
+  const generation = workspaceGeneration;
+  const missionId = milestone.id;
+  const before = Number(readinessSnapshot?.maturity?.percent) || 0;
+  readinessBusy = true;
+  setReadinessStatus("Checking your mission and updating project progress…");
+  renderChat();
+  try {
+    const data = await accountApi("POST", `/api/projects/current/milestones/${encodeURIComponent(missionId)}/complete`, payload);
+    if (userId !== accountSession.user?.id || generation !== workspaceGeneration || readinessMissionId !== missionId) return;
+    readinessCompletion = { title: milestone.title, total: milestone.questions?.length || 0,
+      before, after: Number(data?.maturity?.percent) || before, gain: milestone.weight,
+      nextMission: data?.nextMission || null };
+    readinessMissionId = null;
+    readinessPaused = false;
+    readinessEditIndex = null;
+    readinessComposerDrafts.delete(missionId);
+    readinessEditDrafts.delete(missionId);
+    readinessRequestId = null;
+    $("readiness-chat-confirm").checked = false;
+    $("readiness-chat-observed-value").value = "";
+    rememberReadinessGuide();
+    if (!$("chat-input").value.trim() && readinessHeldComposer && readinessHeldConversationId === activeConversationId) $("chat-input").value = readinessHeldComposer;
+    readinessHeldComposer = "";
+    readinessHeldConversationId = null;
+    setReadinessStatus("");
+    applyReadinessSnapshot(data);
+    renderChat(true);
+    $("readiness-chat-next").hidden ? $("readiness-chat-project").focus() : $("readiness-chat-next").focus();
+  } catch (error) {
+    if (userId === accountSession.user?.id && generation === workspaceGeneration) setReadinessStatus(error.message || "The mission could not be completed. Your answers are saved; retry when ready.", true);
+  } finally {
+    if (userId === accountSession.user?.id && generation === workspaceGeneration) { readinessBusy = false; renderChat(); }
+  }
+}
 
 function loadChatMessages(key = currentStorageKey(CHAT_STORAGE_KEY)) {
   try {
@@ -1351,7 +1925,8 @@ function loadChatMessages(key = currentStorageKey(CHAT_STORAGE_KEY)) {
       role: item.role,
       content: item.content,
       at: item.at,
-      status: item.role === "assistant" ? "complete" : item.status === "complete" ? "complete" : "failed"
+      status: item.role === "assistant" ? "complete" : item.status === "complete" ? "complete" : "failed",
+      ...(item.role === "assistant" && ["crusoe", "adal"].includes(item.provider) ? { provider: item.provider } : {})
     }));
   } catch {
     return [];
@@ -2232,6 +2807,9 @@ function renderChat(scroll = false) {
     time.dateTime = new Date(message.at).toISOString();
     time.textContent = new Intl.DateTimeFormat("en", { hour: "numeric", minute: "2-digit" }).format(message.at);
     line.append(time);
+    if (message.role === "assistant" && ["crusoe", "adal"].includes(message.provider)) {
+      line.append(el("span", "message-provider", message.provider === "crusoe" ? "via Crusoe" : "via AdaL fallback"));
+    }
     const content = el(message.role === "assistant" ? "div" : "p", "message-content");
     if (message.role === "assistant") appendAssistantMarkdown(content, message.content);
     else content.textContent = message.content;
@@ -2278,25 +2856,34 @@ function renderChat(scroll = false) {
     row.append(body);
     return row;
   }));
-  $("chat-empty").hidden = chatMessages.length > 0 || onboarding.active;
+  renderReadinessConversation(list);
+  $("chat-empty").hidden = chatMessages.length > 0 || onboarding.active || readinessGuideActive() || !!readinessCompletion;
   $("create-account-welcome").hidden = accountSession.authenticated;
   $("guest-draft-choice").hidden = accountSession.authenticated || !guestHidden || !loadChatMessages(CHAT_STORAGE_KEY).length;
   renderOnboarding();
-  $("chat-typing").hidden = !chatBusy;
+  $("chat-typing").hidden = !chatBusy && !readinessAnalyzing;
   $("chat-shortcuts").hidden = !!activeMissionRecord() || !chatMessages.some((message) => message.role === "assistant");
   const sampleDemo = chatMessages.some((message) => message.role === "user" && message.content.startsWith("Atelier Loop is a fictional circular-delivery startup.")) || sourceEntries.some((entry) => entry.selected && entry.sources.some((source) => source.sample));
   for (const button of $("chat-shortcuts").querySelectorAll("[data-demo-only]")) button.hidden = !sampleDemo;
   $("export-chat").disabled = chatMessages.length === 0;
   $("export-chat-help").textContent = chatMessages.length ? "Download this chat as Markdown" : "Available after your first message";
   $("use-chat-context").disabled = !chatMessages.some((message) => message.role === "user" && message.status === "complete");
-  $("reset-chat").disabled = chatBusy || sourceBusy || !accountReady;
+  $("reset-chat").disabled = chatBusy || sourceBusy || readinessBusy || !accountReady;
   $("open-decision-canvas").disabled = sourceBusy;
   const input = $("chat-input");
-  $("chat-send").disabled = !accountReady || chatBusy || sourceBusy || isDemoQuotaExhausted() || !!pendingAttachment || !input.value.trim() || input.value.trim() === EVIDENCE_PREFIX.trim();
-  input.disabled = !accountReady || chatBusy || sourceBusy;
-  $("chat-form").setAttribute("aria-busy", chatBusy ? "true" : "false");
-  $("chat-count").textContent = `${input.value.length} / ${CHAT_LIMIT}`;
-  for (const suggestion of document.querySelectorAll("button[data-prompt]")) suggestion.disabled = !accountReady || chatBusy || sourceBusy || isDemoQuotaExhausted();
+  const guided = readinessGuideActive();
+  const readiness = guided ? readinessMilestone() : null;
+  const awaitingAnswer = guided && !(readiness.guidedEvidenceType === "metric" && !readiness.plannedCriterion) && readinessQuestionIndex(readiness) >= 0;
+  input.maxLength = guided ? 700 : CHAT_LIMIT;
+  input.placeholder = guided ? awaitingAnswer ? "Reply or ask Lia for help…" : "Review and confirm your mission above…" : "Ask Lia a question…";
+  $("chat-send").disabled = !accountReady || chatBusy || sourceBusy || readinessBusy || !!pendingAttachment || !input.value.trim() ||
+    (guided ? !awaitingAnswer : isDemoQuotaExhausted() || input.value.trim() === EVIDENCE_PREFIX.trim());
+  input.disabled = !accountReady || chatBusy || sourceBusy || readinessBusy || (guided && !awaitingAnswer);
+  $("chat-form").setAttribute("aria-busy", chatBusy || readinessBusy ? "true" : "false");
+  $("chat-count").textContent = `${input.value.length} / ${guided ? 700 : CHAT_LIMIT}`;
+  for (const suggestion of document.querySelectorAll("button[data-prompt]")) suggestion.disabled = !accountReady || chatBusy || sourceBusy || guided || isDemoQuotaExhausted();
+  if (guided) for (const action of $("chat-messages").querySelectorAll("button[data-response-action]")) action.disabled = true;
+  renderReadinessMission();
   renderMissionTracker();
   renderActiveSources();
   renderAttachment();
@@ -2330,13 +2917,13 @@ async function requestChatReply(message) {
       throw new Error("Selected context is too large for one message. Remove a source summary or unpin the mission, then retry.");
     }
     const data = await postJson("/api/chat", body);
-    if (data.source !== "crusoe" || typeof data.message !== "string" || !data.message.trim()) {
+    if (!["crusoe", "adal"].includes(data.source) || typeof data.message !== "string" || !data.message.trim()) {
       throw new Error("Lia returned an empty reply. Please retry.");
     }
     message.status = "complete";
     chatMessages.push({
       id: crypto.randomUUID(), role: "assistant", content: data.message.trim(),
-      at: Date.now(), status: "complete"
+      at: Date.now(), status: "complete", provider: data.source
     });
     chatMessages = chatMessages.slice(-60);
     persistChat();
@@ -2393,6 +2980,7 @@ function submitChatMessage(rawContent, clearComposer = false) {
 
 function sendChat(event) {
   event.preventDefault();
+  if (readinessGuideActive()) { void submitReadinessAnswer(); return; }
   submitChatMessage($("chat-input").value, true);
 }
 
@@ -2483,7 +3071,7 @@ function exportChat() {
 }
 
 async function resetChat() {
-  if (!accountReady || chatBusy || sourceBusy || accountBusy) return;
+  if (!accountReady || chatBusy || sourceBusy || readinessBusy || accountBusy) return;
   if (!accountSession.authenticated && guestHidden && loadChatMessages(CHAT_STORAGE_KEY).length) {
     setChatStatus("Choose Restore draft or Start fresh above before starting another chat.", true);
     $("guest-start-fresh").focus();
@@ -2505,6 +3093,8 @@ async function resetChat() {
   sourceEntries = [];
   pendingAttachment = null;
   onboarding.active = false;
+  readinessHeldComposer = "";
+  readinessHeldConversationId = null;
   $("chat-file-input").value = "";
   $("chat-input").value = "";
   activeConversationId = null;
@@ -2718,11 +3308,20 @@ function conversationTitle() {
 
 function renderAccount() {
   $("open-account").textContent = accountSession.authenticated ? "Account" : "Sign in";
+  $("open-account").setAttribute("aria-label", accountSession.authenticated ? "Account and saved conversations" : "Sign in or create account");
+  $("account-title").textContent = accountSession.authenticated ? "Your workspace." : accountMode === "signup" ? "Start building." : "Welcome back.";
+  $("account-intro").textContent = accountSession.authenticated
+    ? "Your project, missions and conversations, all in one place."
+    : accountMode === "signup"
+      ? "Create an account to keep your project and progress together."
+      : "Sign in to continue your project, missions and conversations.";
   $("account-signed-out").hidden = accountSession.authenticated;
   $("account-signed-in").hidden = !accountSession.authenticated;
   $("account-email-display").textContent = accountSession.user?.email || "";
   $("account-login-tab").setAttribute("aria-pressed", accountMode === "login" ? "true" : "false");
   $("account-signup-tab").setAttribute("aria-pressed", accountMode === "signup" ? "true" : "false");
+  $("account-login-tab").disabled = accountBusy;
+  $("account-signup-tab").disabled = accountBusy;
   $("account-submit").textContent = accountMode === "signup" ? "Create account" : "Sign in";
   $("account-password").autocomplete = accountMode === "signup" ? "new-password" : "current-password";
   $("account-current-summary").textContent = guestMigrationNeedsSave ? "Copied guest chat stays local until you save it." : "Chats and mission progress save automatically.";
@@ -2805,6 +3404,7 @@ function loadAccountWorkspace() {
   accountSaveFailed = false;
   onboarding.active = false;
   clearAccountBoundMemory();
+  restoreReadinessGuide();
   state = !accountSession.authenticated && guestHidden ? emptyState() : loadState();
   $("brief-input").value = state.brief;
   $("evidence-input").value = state.evidence;
@@ -2864,7 +3464,7 @@ async function loadServerMissionTracker() {
 function clearAuthenticatedLocalDrafts(userId) {
   if (!userId) return;
   const suffix = `-user-${String(userId).replace(/[^A-Za-z0-9_-]/g, "")}`;
-  for (const base of [STORAGE_KEY, CHAT_STORAGE_KEY, MISSION_STORAGE_KEY, MISSION_TRACKER_STORAGE_KEY, ACTIVE_CONVERSATION_KEY, ...(typeof PROJECT_MEMORY_KEY === "string" ? [PROJECT_MEMORY_KEY] : [])]) {
+  for (const base of [STORAGE_KEY, CHAT_STORAGE_KEY, MISSION_STORAGE_KEY, MISSION_TRACKER_STORAGE_KEY, ACTIVE_CONVERSATION_KEY, READINESS_GUIDE_KEY, READINESS_PAUSED_KEY, READINESS_TURNS_KEY, ...(typeof PROJECT_MEMORY_KEY === "string" ? [PROJECT_MEMORY_KEY] : [])]) {
     try { localStorage.removeItem(base + suffix); } catch { /* Browser storage may be unavailable. */ }
   }
 }
@@ -2980,7 +3580,7 @@ async function initializeAccount() {
 }
 
 function openAccount() {
-  if (chatBusy || sourceBusy) { setChatStatus("Wait for Lia to finish before changing accounts."); return; }
+  if (chatBusy || sourceBusy || readinessBusy) { setChatStatus("Wait for Lia to finish before changing accounts."); return; }
   if (!$("mission-drawer").hidden) closeMissionTracker();
   if (!$("source-drawer").hidden) closeSources();
   if (!$("decision-drawer").hidden) closeDecisionCanvas();
@@ -2989,6 +3589,7 @@ function openAccount() {
   $("account-drawer").hidden = false;
   document.body.classList.add("account-open");
   renderAccount();
+  $("account-panel-scroll").scrollTop = 0;
   $("account-panel").focus();
 }
 
@@ -3000,6 +3601,7 @@ function closeAccount() {
 }
 
 function setAccountMode(mode) {
+  if (accountBusy) return;
   accountMode = mode;
   accountMessage("");
   $("account-password").value = "";
@@ -3008,18 +3610,20 @@ function setAccountMode(mode) {
 
 async function submitAccount(event) {
   event.preventDefault();
-  if (accountBusy || chatBusy || sourceBusy || !accountReady) return;
+  if (accountBusy || chatBusy || sourceBusy || readinessBusy || !accountReady) return;
   const email = $("account-email").value.trim();
   const password = $("account-password").value;
+  const submittingMode = accountMode;
+  const hadGuestChat = !guestHidden && chatMessages.length > 0;
   if (!email || password.length < 12 || password.length > 128) {
     accountMessage("Enter a valid email and a password of 12–128 characters.", true);
     return;
   }
   accountBusy = true;
-  accountMessage(accountMode === "signup" ? "Creating account…" : "Signing in…");
+  accountMessage(submittingMode === "signup" ? "Creating account…" : "Signing in…");
   renderAccount();
   try {
-    const data = await accountApi("POST", `/api/auth/${accountMode}`, { email, password });
+    const data = await accountApi("POST", `/api/auth/${submittingMode}`, { email, password });
     if (!data.authenticated || !data.user?.id || !data.csrfToken) throw new Error("Account session could not be established.");
     if (!accountSession.authenticated) guestContextSnapshot = selectedSourceEntries().map((entry) => entry.chatContext);
     accountSession = { authenticated: true, user: data.user, csrfToken: data.csrfToken };
@@ -3027,10 +3631,14 @@ async function submitAccount(event) {
     accountConversations = [];
     loadAccountWorkspace();
     await loadServerMissionTracker();
-    accountMessage("Signed in. Your guest chat is still on this browser; copy it here only if you choose.");
+    accountMessage(submittingMode === "signup"
+      ? "Account created. Your project workspace is ready."
+      : hadGuestChat
+        ? "Signed in. Your guest chat is still on this browser; copy it here only if you choose."
+        : "Signed in. Your project workspace is ready.");
     await refreshConversations();
-    if (accountMode === "login") { selectRecentConversationIfNeeded(); await hydrateActiveConversation(); }
-    if (accountMode === "signup") { closeAccount(); startOnboarding(); }
+    if (submittingMode === "login") { selectRecentConversationIfNeeded(); await hydrateActiveConversation(); }
+    if (submittingMode === "signup") { closeAccount(); startOnboarding(); }
     else if (returnToSourcesAfterAccount) { closeAccount(); openSources(); }
     returnToSourcesAfterAccount = false;
   } catch (error) {
@@ -3039,11 +3647,12 @@ async function submitAccount(event) {
     $("account-password").value = "";
     accountBusy = false;
     renderAccount();
+    $("account-panel-scroll").scrollTop = 0;
   }
 }
 
 async function logoutAccount() {
-  if (accountBusy || chatBusy || sourceBusy || !accountSession.authenticated) return;
+  if (accountBusy || chatBusy || sourceBusy || readinessBusy || !accountSession.authenticated) return;
   if (guestMigrationNeedsSave && !window.confirm("This copied guest chat has not been saved to the account. Its original guest draft will remain on this browser, hidden after sign-out. Continue?")) return;
   const previousUserId = accountSession.user?.id;
   accountBusy = true;
@@ -3067,6 +3676,7 @@ async function logoutAccount() {
   } finally {
     accountBusy = false;
     renderAccount();
+    $("account-panel-scroll").scrollTop = 0;
   }
 }
 
@@ -3105,7 +3715,7 @@ function entryFromSavedContext(context) {
 }
 
 async function saveCurrentConversation() {
-  if (!accountSession.authenticated || accountBusy || chatBusy || sourceBusy || (!chatMessages.length && !missionTracker.records.length && !onboarding.active)) return;
+  if (!accountSession.authenticated || accountBusy || chatBusy || sourceBusy || readinessBusy || (!chatMessages.length && !missionTracker.records.length && !onboarding.active)) return;
   accountBusy = true;
   accountMessage("Saving account progress…");
   renderAccount();
@@ -3123,7 +3733,7 @@ async function saveCurrentConversation() {
 }
 
 async function openSavedConversation(id) {
-  if (!accountSession.authenticated || accountBusy || chatBusy || sourceBusy) return;
+  if (!accountSession.authenticated || accountBusy || chatBusy || sourceBusy || readinessBusy) return;
   if (guestMigrationNeedsSave && chatMessages.length && !window.confirm("Your copied guest chat is still local. Opening another conversation will replace this copy; the original guest draft remains on this browser. Continue?")) return;
   accountBusy = true;
   accountMessage("Loading conversation…");
@@ -3147,6 +3757,8 @@ async function openSavedConversation(id) {
     onboarding.renderedStep = -1;
     sourceEntries = Array.isArray(conversation.sourceContexts) ? conversation.sourceContexts.slice(0, 3).map(entryFromSavedContext) : [];
     pendingAttachment = null;
+    readinessHeldComposer = "";
+    readinessHeldConversationId = null;
     $("chat-file-input").value = "";
     $("chat-input").value = "";
     activeConversationId = conversation.id;
@@ -3172,7 +3784,7 @@ async function openSavedConversation(id) {
 }
 
 async function deleteSavedConversation(id) {
-  if (!accountSession.authenticated || accountBusy || chatBusy || sourceBusy) return;
+  if (!accountSession.authenticated || accountBusy || chatBusy || sourceBusy || readinessBusy) return;
   const isCurrent = activeConversationId === id;
   const prompt = isCurrent
     ? "Permanently delete this saved conversation? Its local chat view and selected summaries will also be cleared. Mission tracker history remains."
@@ -3217,7 +3829,7 @@ async function deleteSavedConversation(id) {
 }
 
 async function deleteDemoAccount() {
-  if (!accountSession.authenticated || accountBusy || chatBusy || sourceBusy) return;
+  if (!accountSession.authenticated || accountBusy || chatBusy || sourceBusy || readinessBusy) return;
   const password = $("account-delete-password").value;
   if (password.length < 12 || password.length > 128) {
     accountMessage("Enter your Lab password to delete this account.", true);
@@ -3250,6 +3862,7 @@ async function deleteDemoAccount() {
     $("account-delete-password").value = "";
     accountBusy = false;
     renderAccount();
+    $("account-panel-scroll").scrollTop = 0;
   }
 }
 
@@ -3268,7 +3881,7 @@ $("account-logout").addEventListener("click", logoutAccount);
 $("account-delete").addEventListener("click", deleteDemoAccount);
 $("account-save-chat").addEventListener("click", saveCurrentConversation);
 $("account-save-retry").addEventListener("click", async () => {
-  if (!accountSession.authenticated || accountBusy || chatBusy || sourceBusy) return;
+  if (!accountSession.authenticated || accountBusy || chatBusy || sourceBusy || readinessBusy) return;
   accountSaveFailed = false;
   updateSaveIndicator();
   const results = await Promise.allSettled([writeConversation(true), flushMissionSync()]);
@@ -3312,7 +3925,7 @@ $("account-conversations").addEventListener("click", (event) => {
 $("account-drawer").addEventListener("keydown", (event) => {
   if (event.key === "Escape") { event.preventDefault(); closeAccount(); return; }
   if (event.key !== "Tab") return;
-  const controls = [...$("account-drawer").querySelectorAll("button:not(:disabled), input:not(:disabled)")]
+  const controls = [...$("account-drawer").querySelectorAll("button:not(:disabled), input:not(:disabled), summary")]
     .filter((node) => node.getClientRects().length > 0 && node.id !== "account-backdrop");
   if (!controls.length) return;
   const first = controls[0], last = controls[controls.length - 1];
@@ -3362,6 +3975,58 @@ $("source-drawer").addEventListener("keydown", (event) => {
   else if (!event.shiftKey && (document.activeElement === last || document.activeElement === $("source-panel"))) { event.preventDefault(); first.focus(); }
 });
 $("chat-form").addEventListener("submit", sendChat);
+window.addEventListener("build:maturity-loaded", (event) => syncReadinessSnapshot(event.detail?.snapshot));
+window.addEventListener("build:mission-guide", (event) => { void startReadinessMission(event.detail?.missionId); });
+window.addEventListener("build:experiment-applied", (event) => {
+  if (!readinessGuideActive() || readinessMissionId !== "interest_test" || !event.detail?.experimentId) return;
+  event.preventDefault();
+  readinessExperimentId = String(event.detail.experimentId);
+  readinessExperimentsFetched = false;
+  setReadinessStatus("Your analyzed test is linked. Finish Lia's questions, then review the result and confirm this mission.");
+  void loadReadinessExperiments();
+  renderChat(true);
+});
+$("readiness-chat-answers").addEventListener("click", (event) => {
+  const button = event.target.closest("button[data-readiness-edit]");
+  const milestone = readinessMilestone();
+  if (!button || !milestone || readinessBusy) return;
+  const index = Number(button.dataset.readinessEdit);
+  if (!Number.isInteger(index) || index < 0 || index >= milestone.questions.length) return;
+  readinessEditIndex = index;
+  $("chat-input").value = milestone.draft.answers[index] || "";
+  $("readiness-chat-confirm").checked = false;
+  setReadinessStatus(milestone.draft?.reviewed?.[index] === true
+    ? "Editing this answer. Lia will review the revised text before saving it."
+    : "This earlier answer needs Lia's review. Send it as-is or improve it first.");
+  renderChat(true);
+  $("chat-input").focus();
+});
+$("readiness-chat-pause").addEventListener("click", pauseReadinessMission);
+$("readiness-chat-criterion").addEventListener("submit", setReadinessCriterion);
+$("readiness-chat-confirm").addEventListener("change", renderReadinessMission);
+$("readiness-chat-complete").addEventListener("click", () => { void completeReadinessMission(); });
+$("readiness-chat-experiment-select").addEventListener("change", (event) => { readinessExperimentId = event.target.value; renderReadinessMission(); });
+$("readiness-chat-refresh-tests").addEventListener("click", () => { readinessExperimentsFetched = false; void loadReadinessExperiments(); });
+$("readiness-chat-tool").addEventListener("click", () => {
+  const milestone = readinessMilestone();
+  if (!milestone || readinessBusy) return;
+  if (milestone.guidedEvidenceType === "experiment") window.BUILDHome?.openMissionWork?.(milestone);
+  else if (milestone.guidedEvidenceType === "metric") { history.replaceState(null, "", "#missions"); window.BUILDHome?.selectView("roadmap", { focus: true }); }
+});
+$("readiness-chat-next").addEventListener("click", () => {
+  const id = readinessCompletion?.nextMission?.id;
+  if (!id || id === "launch_pilot") return;
+  readinessCompletion = null;
+  void startReadinessMission(id);
+});
+$("readiness-chat-project").addEventListener("click", () => {
+  history.replaceState(null, "", "#project");
+  window.BUILDHome?.selectView("project", { focus: true });
+});
+$("readiness-saved-facts-list").addEventListener("click", (event) => {
+  const button = event.target.closest("button[data-readiness-continue]");
+  if (button) void startReadinessMission(button.dataset.readinessContinue);
+});
 $("chat-input").addEventListener("focus", collapseMissionInChat);
 $("chat-input").addEventListener("input", () => renderChat());
 $("chat-input").addEventListener("keydown", (event) => {

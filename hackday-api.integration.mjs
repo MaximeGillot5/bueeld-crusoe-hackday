@@ -12,7 +12,7 @@ const root = dirname(fileURLToPath(import.meta.url));
 const dataDir = await mkdtemp(join(tmpdir(), 'bueeld-hackday-api-'));
 const server = spawn(process.execPath, [join(root, 'server.mjs')], {
   cwd: root,
-  env: { PATH: process.env.PATH || '', HOME: dataDir, HOST: '127.0.0.1', PORT: '0',
+  env: { PATH: process.env.PATH || '', HOME: dataDir, HOST: '127.0.0.1', PORT: '0', BUEELD_SKIP_LOCAL_ENV: '1',
     LAB_DATA_DIR: dataDir, MAX_AI_CALLS: '3', MAX_AI_CALLS_PER_USER: '2' },
   stdio: ['ignore', 'pipe', 'pipe'],
 });
@@ -91,6 +91,40 @@ async function run() {
   const noCsrf = await request('/api/projects/current/milestones/value_proposition/validate', {
     method: 'POST', cookie: a.cookie, body: milestoneBody });
   assert.equal(noCsrf.status, 403);
+
+  // Guided chat never persists an answer when AI is unavailable. The legacy
+  // direct-write endpoint is closed, so a client cannot bypass analysis.
+  const guided = await signup();
+  const guidedMission = '/api/projects/current/milestones/target_problem';
+  const guidedStart = await request('/api/projects/current/maturity', { cookie: guided.cookie });
+  assert.equal(guidedStart.status, 200);
+  const firstMilestone = guidedStart.body.maturity.milestones.find((item) => item.id === 'target_problem');
+  assert.ok(Array.isArray(firstMilestone.questions) && firstMilestone.questions.length === 3,
+    'the mission must supply Lia with its questions');
+  assert.deepEqual(firstMilestone.draft.answers, ['', '', '']);
+  assert.equal(firstMilestone.draft.answeredCount, 0);
+  const answer = 'Independent neighborhood bookstore owners in San Francisco who handle online orders themselves.';
+  const missingCsrf = await request(`${guidedMission}/turn`, { method: 'POST', cookie: guided.cookie,
+    body: { stepIndex: 0, message: answer } });
+  assert.equal(missingCsrf.status, 403);
+  const legacyWrite = await request(`${guidedMission}/answers`, { method: 'PUT',
+    cookie: guided.cookie, csrf: guided.csrf, body: { stepIndex: 0, answer } });
+  assert.equal(legacyWrite.status, 410);
+  const beforeAnswers = await request(`${guidedMission}/complete`, { method: 'POST',
+    cookie: guided.cookie, csrf: guided.csrf, body: { confirmed: true, requestId: randomUUID() } });
+  assert.ok(beforeAnswers.status >= 400, 'an unanswered mission cannot be completed');
+  const failedAnalysis = await request(`${guidedMission}/turn`, { method: 'POST',
+    cookie: guided.cookie, csrf: guided.csrf, body: { stepIndex: 0, message: answer } });
+  assert.equal(failedAnalysis.status, 503, JSON.stringify(failedAnalysis.body));
+  const resumed = await request('/api/projects/current/maturity', { cookie: guided.cookie });
+  assert.equal(resumed.status, 200);
+  const resumedMission = resumed.body.maturity.milestones.find((item) => item.id === 'target_problem');
+  assert.deepEqual(resumedMission.draft.answers, ['', '', ''], 'AI outage must not save an answer');
+  assert.equal(resumedMission.draft.answeredCount, 0);
+  assert.equal(resumedMission.draft.complete, false);
+  assert.equal(resumed.body.maturity.percent, 0);
+  const separateFounder = await request('/api/projects/current/maturity', { cookie: b.cookie });
+  assert.equal(JSON.stringify(separateFounder.body).includes(answer), false, 'answers are owner-scoped');
 
   const proposed = await request('/api/experiments/propose', { method: 'POST', cookie: a.cookie, csrf: a.csrf,
     body: { missionId: 'interest_test', title: 'Would founders try BUEELD?',

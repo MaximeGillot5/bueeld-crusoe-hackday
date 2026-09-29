@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 
 const ENDPOINT = 'https://api.inference.crusoecloud.com/v1/chat/completions';
-const DEFAULT_MODEL = 'deepseek-ai/DeepSeek-V4-Flash';
+const DEFAULT_MODEL = 'deepseek-ai/Deepseek-V4-Flash';
 const MAX_RESPONSE_CHARACTERS = 1_000_000;
 let defaultRolePromise;
 
@@ -64,6 +64,24 @@ function retryDelay(response, attempt, baseMs) {
     return Math.min(3_000, Math.ceil(seconds * 1_000));
   }
   return Math.min(3_000, baseMs * 2 ** (attempt - 1));
+}
+
+async function isCreditFailure(response) {
+  if (response.status === 402) return true;
+  if (![400, 403, 429].includes(response.status)) return false;
+  let payload;
+  try {
+    const body = await response.text();
+    if (body.length > 8_000) return false;
+    payload = JSON.parse(body);
+  } catch { return false; }
+  const error = payload?.error && typeof payload.error === 'object' ? payload.error : payload;
+  const code = String(error?.code || error?.type || payload?.code || '').toLowerCase();
+  if (['insufficient_credits', 'credits_exhausted', 'credit_balance_exhausted',
+    'insufficient_quota', 'insufficient_funds', 'payment_required', 'billing_quota_exceeded'].includes(code)) return true;
+  const message = String(error?.message || error?.detail || '').toLowerCase();
+  return /(?:insufficient|exhausted|depleted|no remaining|out of|not enough)\s+(?:\w+\s+){0,2}credits?\b/.test(message)
+    || /\bcredit balance\b.*\b(?:zero|exhausted|insufficient|depleted)\b/.test(message);
 }
 
 function sleep(ms) {
@@ -139,6 +157,9 @@ export function createCrusoeProvider(options = {}) {
         throw providerError('Crusoe could not be reached.', 503, 'CRUSOE_NETWORK');
       }
 
+      if (await isCreditFailure(response)) {
+        throw providerError('Crusoe credits are exhausted or billing is required.', 503, 'CRUSOE_CREDITS_EXHAUSTED');
+      }
       if (response.status === 401 || response.status === 403) {
         throw providerError('Crusoe rejected the server credentials.', 503, 'CRUSOE_AUTH');
       }

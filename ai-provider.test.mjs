@@ -13,7 +13,7 @@ function response(status, value, headers = {}) {
 
 function completion(content, extra = {}) {
   return response(200, {
-    model: 'deepseek-ai/DeepSeek-V4-Flash',
+    model: 'deepseek-ai/Deepseek-V4-Flash',
     choices: [{ message: { content }, finish_reason: 'stop' }],
     usage: { prompt_tokens: 12, completion_tokens: 7, total_tokens: 19 },
     ...extra,
@@ -47,7 +47,7 @@ test('sends Lia instructions and returns verified provider metadata', async () =
   assert.equal(JSON.parse(request.options.body).max_tokens, 2048);
   assert.equal(result.text, 'One clear answer.');
   assert.equal(result.provider, 'crusoe');
-  assert.equal(result.model, 'deepseek-ai/DeepSeek-V4-Flash');
+  assert.equal(result.model, 'deepseek-ai/Deepseek-V4-Flash');
   assert.deepEqual(result.usage, { prompt_tokens: 12, completion_tokens: 7, total_tokens: 19 });
   assert.equal(result.requestId, 'mission-7');
   assert.ok(result.durationMs >= 0);
@@ -99,6 +99,33 @@ test('does not retry invalid credentials', async () => {
     fetchImpl: async () => { calls++; return response(401, { detail: 'bad key' }); },
   });
   await assert.rejects(provider.generateText({ prompt: 'Hello' }), { code: 'CRUSOE_AUTH' });
+  assert.equal(calls, 1);
+});
+
+test('recognizes a payment-required response as exhausted Crusoe credits', async () => {
+  let calls = 0;
+  const provider = createCrusoeProvider({
+    apiKey: 'test-secret', systemPrompt: 'Lia',
+    fetchImpl: async () => { calls++; return response(402, {}); },
+  });
+  await assert.rejects(provider.generateText({ prompt: 'Hello' }), {
+    code: 'CRUSOE_CREDITS_EXHAUSTED', status: 503,
+  });
+  assert.equal(calls, 1);
+});
+
+test('recognizes an explicit credit error on 429 without mistaking normal rate limiting for credits', async () => {
+  let calls = 0;
+  const provider = createCrusoeProvider({
+    apiKey: 'test-secret', systemPrompt: 'Lia', retryBaseMs: 0,
+    fetchImpl: async () => {
+      calls++;
+      return response(429, { error: { code: 'insufficient_credits', message: 'Account credits exhausted' } });
+    },
+  });
+  await assert.rejects(provider.generateText({ prompt: 'Hello' }), {
+    code: 'CRUSOE_CREDITS_EXHAUSTED', status: 503,
+  });
   assert.equal(calls, 1);
 });
 

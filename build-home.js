@@ -6,6 +6,7 @@
   const roadmapView = byId("build-roadmap-view");
   const liaView = document.querySelector(".chat-workspace");
   if (!projectView || !roadmapView || !liaView) return;
+  const readinessCard = projectView.querySelector(".build-maturity-card");
 
   let snapshot = null;
   let selectedMission = null;
@@ -14,6 +15,7 @@
   let pendingValidation = null;
   let evidenceSourceKind = "manual";
   let lastMissionOpener = null;
+  let missionReturnView = null;
   let lastRoadmapOpener = null;
   const metricMilestones = new Set(["problem_priority", "engagement_signal", "essential_task_success"]);
 
@@ -56,6 +58,12 @@
     byId("build-mission-backdrop").hidden = true;
     document.body.classList.toggle("build-modal-open", currentView === "roadmap");
     selectedMission = null;
+    const returnView = missionReturnView;
+    missionReturnView = null;
+    if (returnView && currentView !== returnView) {
+      history.replaceState(null, "", returnView === "lia" ? "#lia" : "#project");
+      selectView(returnView);
+    }
     if (restoreFocus && lastMissionOpener instanceof HTMLElement) lastMissionOpener.focus();
   }
 
@@ -88,6 +96,12 @@
   function accountState(message) {
     snapshot = null;
     byId("build-home-grid").hidden = false;
+    readinessCard.dataset.state = "unstarted";
+    projectView.dataset.readinessState = "unstarted";
+    text(byId("build-readiness-index"), "4 STAGES");
+    text(byId("build-maturity-title"), "Your pilot starts here.");
+    text(byId("build-maturity-copy"), "Create your project to unlock a first mission and a clear path to your pilot.");
+    text(byId("build-readiness-start").querySelector(".build-readiness-start-label"), "Create your project");
     byId("build-maturity-value").textContent = "—";
     byId("build-maturity-value").nextElementSibling.hidden = true;
     byId("build-maturity-progress").value = 0;
@@ -226,14 +240,21 @@
       "Record what happened and submit the result for validation."
     ];
     const stepList = byId("build-mission-steps");
-    stepList.replaceChildren(...steps.map((step) => {
+    const answers = Array.isArray(mission.draft?.answers) ? mission.draft.answers : [];
+    stepList.replaceChildren(...steps.map((step, index) => {
       const item = document.createElement("li");
       item.textContent = typeof step === "string" ? step : step?.title || step?.description || "Complete this step";
+      item.classList.toggle("is-answered", Boolean(answers[index]?.trim()));
       return item;
     }));
     text(byId("build-mission-proof"), criterion || "Describe the observed result and attach a source when you have one. Only validated real evidence adds maturity.");
     text(byId("build-mission-checkpoints-label"), `${steps.length} CHECKPOINT${steps.length === 1 ? "" : "S"}`);
     const id = missionId(mission);
+    const documentary = id === "target_problem" || id === "value_proposition" || id === "prototype_scope" || id === "price_and_costs" || id === "pilot_ready";
+    text(byId("build-mission-details").querySelector(".build-mission-proof strong"), documentary ? "What to document" : "What counts as proof");
+    text(byId("build-mission-details").querySelector(".build-mission-brief-actions > span"), documentary
+      ? "Lia will guide you through these details. Review and confirm your own project information before this milestone is credited."
+      : "Progress is earned only after your real result is validated.");
     const isMetric = metricMilestones.has(id);
     const milestone = snapshot?.maturity?.milestones?.find((item) => item.id === id);
     const prepared = milestone?.plannedCriterion?.criterion;
@@ -242,12 +263,12 @@
     const score = Number(snapshot?.maturity?.percent);
     const hasScore = Number.isInteger(score) && score >= 0 && score <= 100;
     const reward = Number.isInteger(gain) && gain > 0 ? gain : 0;
-    text(byId("build-mission-reward-label"), validated ? "ALREADY EARNED" : "ON VALIDATION");
+    text(byId("build-mission-reward-label"), validated ? "ALREADY EARNED" : documentary ? "ON CONFIRMATION" : "ON VALIDATION");
     text(byId("build-mission-reward"), reward ? `+${reward}%` : "—");
     text(byId("build-mission-current-maturity"), hasScore ? `${score}%` : "—");
     byId("build-mission-progress-bar").value = hasScore ? score : 0;
     byId("build-mission-progress-bar").setAttribute("aria-valuetext", hasScore ? `${score} percent validated` : "Project maturity unavailable");
-    text(byId("build-mission-potential"), validated ? "This milestone is already validated" : hasScore && reward ? `Could reach ${Math.min(100, score + reward)}% once validated` : "Points unlock after evidence is validated.");
+    text(byId("build-mission-potential"), validated ? "This milestone is already validated" : hasScore && reward ? `Could reach ${Math.min(100, score + reward)}% once ${documentary ? "confirmed" : "validated"}` : "Points unlock when the mission is complete.");
     byId("build-evidence-metric").hidden = !isMetric;
     byId("build-evidence-observed").required = isMetric && Boolean(prepared);
     byId("build-evidence-submit").disabled = isMetric && !prepared;
@@ -261,26 +282,33 @@
     text(byId("build-mission-work-kicker"), id === "interest_test" ? "SHAREABLE TEST" : "REAL-WORLD RESULT");
     text(byId("build-mission-work-title"), id === "interest_test" ? "Design your public test" : "Record your evidence");
     const start = byId("build-mission-start");
-    start.dataset.action = isMetric && !prepared ? "criterion" : "work";
-    text(start, isMetric && !prepared ? "Set success threshold →" : id === "interest_test" ? "Prepare public test →" : "Record evidence →");
+    start.dataset.action = "chat";
+    text(start, Number(mission.draft?.answeredCount) > 0 ? "Continue with Lia →" : "Start with Lia →");
   }
 
   function renderMission(mission, maturity) {
     const score = Number(maturity?.percent);
     const hasScore = Number.isInteger(score) && score >= 0 && score <= 100;
+    readinessCard.dataset.state = hasScore ? "scored" : "unstarted";
+    projectView.dataset.readinessState = hasScore ? "scored" : "unstarted";
+    readinessCard.style.setProperty("--readiness-progress", hasScore ? `${score}%` : "0%");
+    text(byId("build-readiness-index"), hasScore ? "01 / 04" : "4 STAGES");
+    text(byId("build-maturity-title"), hasScore ? "Maturity for your first pilot" : "Your path starts here.");
+    if (!hasScore) text(byId("build-readiness-start").querySelector(".build-readiness-start-label"), "Plan with Lia");
     text(byId("build-maturity-value"), hasScore ? score : "—");
     byId("build-maturity-value").nextElementSibling.hidden = !hasScore;
     byId("build-maturity-progress").value = hasScore ? score : 0;
     byId("build-maturity-progress").setAttribute("aria-valuetext", hasScore ? `${score} percent of first-pilot readiness` : "Project maturity unavailable");
     text(byId("build-roadmap-percent"), hasScore ? `${score}%` : "—");
     const mature = score === 100;
-    text(byId("build-maturity-status"), mature ? "Project at maturity" : "Building toward your first pilot");
-    text(byId("build-maturity-copy"), mature ? "All first-pilot milestones have been validated. Your next step is to launch the pilot." : "Each validated mission adds its announced points toward a first pilot.");
+    text(byId("build-maturity-status"), mature ? "Ready to plan your pilot" : "In progress");
+    text(byId("build-maturity-copy"), !hasScore ? "Ask Lia to shape a first mission. Your readiness will grow as you validate real evidence." : mature ? "All milestones validated. Plan your first pilot." : "Validated evidence moves you toward a first pilot.");
     if (!mission) {
       text(byId("build-next-title"), mature ? "Launch your first pilot." : "Your next mission is being prepared.");
       text(byId("build-next-description"), mature ? "Your project has reached 100% on this readiness path." : "Ask Lia to identify the next missing milestone and the evidence that would validate it.");
       byId("build-mission-gain").hidden = true;
       byId("build-next-criterion").hidden = true;
+      byId("build-next-progress").hidden = true;
       text(byId("build-next-action"), mature ? "Talk through pilot launch →" : "Plan a mission with Lia →");
       byId("build-mission-details").hidden = true;
       return;
@@ -290,12 +318,20 @@
     text(byId("build-next-description"), mission.description || mission.summary || "Complete the mission and collect the evidence needed for validation.");
     const gainNode = byId("build-mission-gain");
     gainNode.hidden = !Number.isInteger(gain) || gain <= 0;
-    if (!gainNode.hidden) text(gainNode, `+${gain}% maturity`);
+    if (!gainNode.hidden) {
+      text(byId("build-mission-gain-condition"), mission.guidedEvidenceType === "documentation" ? "ON CONFIRMATION" : "ON VALIDATION");
+      text(byId("build-mission-gain-value"), `+${gain}%`);
+    }
     const criterion = mission.criterion || mission.successCriterion || mission.evidenceRequired;
     const criterionNode = byId("build-next-criterion");
     criterionNode.hidden = !criterion;
-    if (criterion) criterionNode.textContent = `Evidence needed: ${criterion}`;
-    text(byId("build-next-action"), mature ? "Discuss pilot launch with Lia →" : "Open mission →");
+    if (criterion) criterionNode.textContent = `${missionId(mission) === "target_problem" ? "To document" : "Evidence needed"}: ${criterion}`;
+    const answered = Number(mission.draft?.answeredCount) || 0;
+    const total = Number(mission.draft?.totalSteps) || (Array.isArray(mission.questions) ? mission.questions.length : 0);
+    const progress = byId("build-next-progress");
+    progress.hidden = !total || !answered;
+    if (!progress.hidden) text(progress, `${Math.min(answered, total)} of ${total} questions answered with Lia`);
+    text(byId("build-next-action"), mature ? "Discuss pilot launch with Lia →" : mission.draft?.complete ? "Review with Lia →" : answered ? "Continue mission →" : "Open mission →");
     if (!selectedMission) renderMissionDetails(mission);
   }
 
@@ -373,6 +409,16 @@
 
   function prefillEvidence({ summary, experimentId, outcome = "learned" }) {
     if (!summary || !experimentId) return;
+    const guided = new CustomEvent("build:experiment-applied", {
+      cancelable: true, detail: { experimentId, summary }
+    });
+    window.dispatchEvent(guided);
+    if (guided.defaultPrevented) {
+      closeMission(false);
+      history.replaceState(null, "", "#lia");
+      selectView("lia", { focus: true });
+      return;
+    }
     evidenceSourceKind = "experiment";
     byId("build-evidence-summary").value = summary.slice(0, 1500);
     byId("build-evidence-reference").value = experimentId;
@@ -443,10 +489,15 @@
 
   for (const button of document.querySelectorAll(".build-nav-link")) button.addEventListener("click", () => {
     const name = button.dataset.buildView;
+    if (name === "roadmap" && typeof accountReady !== "undefined" && accountReady && !getAccount().authenticated) {
+      byId("open-account")?.click();
+      return;
+    }
     history.replaceState(null, "", name === "project" ? "#project" : name === "roadmap" ? "#missions" : "#lia");
     selectView(name, { focus: true });
   });
   byId("build-open-roadmap").addEventListener("click", () => selectView("roadmap", { focus: true }));
+  byId("build-readiness-start").addEventListener("click", openNextMission);
   byId("build-roadmap-close").addEventListener("click", closeRoadmap);
   byId("build-roadmap-backdrop").addEventListener("click", closeRoadmap);
   byId("build-ask-lia").addEventListener("click", () => selectView("lia", { focus: true }));
@@ -458,12 +509,11 @@
   byId("build-mission-success-close").addEventListener("click", closeMission);
   byId("build-mission-back").addEventListener("click", () => { setMissionStage("brief"); byId("build-mission-start").focus(); });
   byId("build-mission-start").addEventListener("click", () => {
-    if (byId("build-mission-start").dataset.action === "criterion") {
-      closeMission(false);
-      selectView("roadmap", { focus: true });
-      return;
-    }
-    setMissionStage("work");
+    const id = missionId(currentMission());
+    closeMission(false);
+    history.replaceState(null, "", "#lia");
+    selectView("lia", { focus: true });
+    if (id) window.dispatchEvent(new CustomEvent("build:mission-guide", { detail: { missionId: id } }));
   });
   byId("build-evidence-form").addEventListener("submit", submitEvidence);
   window.addEventListener("hashchange", () => selectView(location.hash === "#missions" ? "roadmap" : location.hash === "#lia" ? "lia" : "project", { focus: true }));
@@ -482,7 +532,16 @@
   });
   window.addEventListener("focus", () => { if (currentView !== "lia") void refresh(); });
   window.addEventListener("build:workspace-changed", () => { void refresh(); });
-  window.BUILDHome = { current: currentMission, refresh, openMission: openNextMission, openInterestTest, prefillEvidence, selectView };
+  window.BUILDHome = { current: currentMission, refresh, openMission: openNextMission, openInterestTest, prefillEvidence, selectView,
+    applySnapshot(data) { ++requestGeneration; render(data); },
+    openMissionWork(mission) {
+      if (!mission) return;
+      missionReturnView = currentView;
+      selectView("project");
+      selectedMission = mission;
+      showMission(mission);
+      setMissionStage("work");
+    } };
   selectView(location.hash === "#missions" ? "roadmap" : location.hash === "#lia" ? "lia" : "project", { focus: location.hash === "#missions" });
   const readyPoll = setInterval(() => {
     if (typeof accountReady !== "undefined" && accountReady) { clearInterval(readyPoll); void refresh(); }
