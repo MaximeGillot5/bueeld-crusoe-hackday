@@ -1,0 +1,170 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Bueeld Hackathon Decision Loop",
+  "description": "Schema describing a single iteration of the Bueeld decision loop: the facts driving the decision, the risky assumption being tested, the candidate options, the recommended experiment to validate the assumption, human approval status, the observed result, and the resulting reassessment.",
+  "type": "object",
+  "properties": {
+    "facts": {
+      "type": "array",
+      "description": "Known, verified facts informing the current decision.",
+      "items": {
+        "type": "string"
+      },
+      "minItems": 1
+    },
+    "riskyAssumption": {
+      "type": "object",
+      "description": "The single riskiest assumption underlying the decision.",
+      "properties": {
+        "statement": {
+          "type": "string",
+          "description": "The assumption being made, stated as a testable claim."
+        },
+        "impactIfWrong": {
+          "type": "string",
+          "description": "Consequence to the plan if this assumption turns out to be false."
+        },
+        "confidence": {
+          "type": "string",
+          "enum": ["low", "medium", "high"],
+          "description": "Current confidence level that the assumption is true."
+        }
+      },
+      "required": ["statement", "impactIfWrong"]
+    },
+    "options": {
+      "type": "array",
+      "description": "The two candidate options being weighed.",
+      "minItems": 2,
+      "maxItems": 2,
+      "items": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "Short label for the option."
+          },
+          "description": {
+            "type": "string",
+            "description": "What choosing this option entails."
+          },
+          "pros": {
+            "type": "array",
+            "items": { "type": "string" }
+          },
+          "cons": {
+            "type": "array",
+            "items": { "type": "string" }
+          }
+        },
+        "required": ["name", "description"]
+      }
+    },
+    "recommendedExperiment": {
+      "type": "object",
+      "description": "The smallest experiment recommended to validate the risky assumption before committing.",
+      "properties": {
+        "description": {
+          "type": "string",
+          "description": "What the experiment involves."
+        },
+        "metric": {
+          "type": "string",
+          "description": "The measurable signal the experiment will produce."
+        },
+        "threshold": {
+          "type": "string",
+          "description": "The pass/fail bar for the metric that determines the outcome of the experiment."
+        },
+        "estimatedDuration": {
+          "type": "string",
+          "description": "Rough time needed to run the experiment."
+        }
+      },
+      "required": ["description", "metric", "threshold"]
+    },
+    "humanApproval": {
+      "type": "object",
+      "description": "Human sign-off on running the recommended experiment or acting on its result.",
+      "properties": {
+        "status": {
+          "type": "string",
+          "enum": ["pending", "approved", "rejected"],
+          "description": "Current approval status."
+        },
+        "approver": {
+          "type": "string",
+          "description": "Name or identifier of the person approving/rejecting."
+        },
+        "notes": {
+          "type": "string",
+          "description": "Any comments accompanying the approval decision."
+        },
+        "timestamp": {
+          "type": "string",
+          "format": "date-time",
+          "description": "When the approval decision was recorded."
+        }
+      },
+      "required": ["status"]
+    },
+    "observedResult": {
+      "type": "object",
+      "description": "The actual outcome measured after running the experiment.",
+      "properties": {
+        "metricValue": {
+          "type": "string",
+          "description": "The measured value of the experiment's metric."
+        },
+        "metThreshold": {
+          "type": "boolean",
+          "description": "Whether the observed metric value met the defined threshold."
+        },
+        "summary": {
+          "type": "string",
+          "description": "Narrative summary of what was observed."
+        },
+        "timestamp": {
+          "type": "string",
+          "format": "date-time",
+          "description": "When the result was observed/recorded."
+        }
+      },
+      "required": ["metricValue", "metThreshold"]
+    },
+    "reassessment": {
+      "type": "object",
+      "description": "Updated understanding and next decision after reviewing the observed result.",
+      "properties": {
+        "updatedConfidence": {
+          "type": "string",
+          "enum": ["low", "medium", "high"],
+          "description": "Revised confidence in the risky assumption after the experiment."
+        },
+        "chosenOption": {
+          "type": "string",
+          "description": "Name of the option selected based on the result."
+        },
+        "rationale": {
+          "type": "string",
+          "description": "Why this option was chosen given the observed result."
+        },
+        "nextSteps": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Follow-up actions resulting from this decision loop iteration."
+        }
+      },
+      "required": ["chosenOption", "rationale"]
+    }
+  },
+  "required": [
+    "facts",
+    "riskyAssumption",
+    "options",
+    "recommendedExperiment",
+    "humanApproval",
+    "observedResult",
+    "reassessment"
+  ]
+}

@@ -1,0 +1,396 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#f6f8fc" />
+    <meta name="description" content="Bueeld Lab is a conversational AI co-founder prototype powered by AdaL." />
+    <title>Lia — Bueeld Lab</title>
+    <link rel="stylesheet" href="./styles.css" />
+    <link rel="stylesheet" href="./progress.css" />
+    <script src="./demo-tour.js" defer></script>
+    <script src="./lab-growth.js" defer></script>
+    <script src="./app.js" defer></script>
+    <script src="./progress-panel.js" defer></script>
+  </head>
+  <body>
+    <a class="skip-link" href="#main">Skip to conversation</a>
+    <header class="app-header">
+      <div class="app-identity">
+        <a class="wordmark" href="https://bueeld.com/" target="_blank" rel="noopener noreferrer" aria-label="Bueeld, opens in a new tab">
+          <svg class="bueeld-logo" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 280 120" width="110" height="47" role="img" aria-label="bueeld" focusable="false">
+            <defs><linearGradient id="bueeld-logo-gradient" x1="0%" y1="0%" x2="100%" y2="0%"><stop offset="0%" stop-color="#101828" /><stop offset="100%" stop-color="#6254d8" /></linearGradient></defs>
+            <text x="10" y="85" font-family="Outfit, system-ui, sans-serif" font-size="76" font-weight="800" fill="url(#bueeld-logo-gradient)" letter-spacing="-1.5" aria-hidden="true">bueeld</text>
+          </svg>
+        </a>
+        <span class="identity-divider" aria-hidden="true"></span>
+        <div class="lia-identity"><span class="lia-indicator" aria-hidden="true"></span><strong>Lia</strong><span class="lab-label">AI CO-FOUNDER</span></div>
+      </div>
+      <nav class="header-actions" aria-label="Workspace actions">
+        <button type="button" class="header-action" id="open-missions">Progress <span class="mission-nav-badge" id="mission-nav-badge" hidden>0</span></button>
+        <button type="button" class="header-action" id="open-sources">Sources</button>
+        <button type="button" class="header-action" id="open-account" aria-label="Account and saved conversations">Account</button>
+        <button type="button" class="header-action" id="reset-chat">New chat</button>
+        <details class="header-more" id="header-more">
+          <summary class="header-action header-more-trigger" id="header-more-trigger" aria-controls="header-more-actions">More <svg class="header-more-chevron" viewBox="0 0 20 20" aria-hidden="true"><path d="m6 8 4 4 4-4" /></svg></summary>
+          <div class="header-more-actions" id="header-more-actions" role="group" aria-label="More workspace actions">
+            <p class="header-more-label">Workspace tools</p>
+            <button type="button" class="header-tool" id="open-decision-canvas" aria-labelledby="decision-tool-label" aria-describedby="decision-tool-help">
+              <span class="header-tool-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="3" /><path d="M4 10h16M10 10v10" /></svg></span>
+              <span class="header-tool-copy"><strong id="decision-tool-label">Decision canvas</strong><small id="decision-tool-help">Plan a test step by step</small></span>
+              <svg class="header-tool-arrow" viewBox="0 0 20 20" aria-hidden="true"><path d="m8 6 4 4-4 4" /></svg>
+            </button>
+            <button type="button" class="header-tool" id="export-chat" aria-labelledby="export-tool-label" aria-describedby="export-chat-help" disabled>
+              <span class="header-tool-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 3v11m-4-4 4 4 4-4M5 15v4a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-4" /></svg></span>
+              <span class="header-tool-copy"><strong id="export-tool-label">Export conversation</strong><small id="export-chat-help">Available after your first message</small></span>
+            </button>
+          </div>
+        </details>
+      </nav>
+    </header>
+
+    <main id="main" class="app-main">
+      <section class="chat-workspace" aria-labelledby="chat-title">
+        <h1 id="chat-title" class="visually-hidden">Conversation with Lia, your AI co-founder</h1>
+        <div class="chat-transcript" id="chat-transcript" role="log" aria-label="Conversation with Lia" aria-live="polite" aria-relevant="additions text">
+          <div class="chat-empty" id="chat-empty">
+            <h2>How can I help you build?</h2>
+            <p>Lia is your AI co-founder. Talk through an idea, challenge a decision, or bring back new evidence one message at a time.</p>
+            <div class="welcome-start-actions">
+              <button type="button" class="welcome-demo" id="start-demo"><strong>Try Lia in 2 minutes <span aria-hidden="true">↗</span></strong><small>Guided example · no account</small></button>
+              <button type="button" class="welcome-account" id="create-account-welcome">Create a Lab account <span>Guided setup · saved chats</span></button>
+            </div>
+            <div class="guest-draft-choice" id="guest-draft-choice" hidden><p>A guest draft is saved on this browser. Choose how to continue.</p><div><button type="button" id="guest-restore-draft">Restore draft</button><button type="button" id="guest-start-fresh">Start fresh</button></div></div>
+            <div class="welcome-paths" aria-label="Choose how to start">
+              <button type="button" class="welcome-path" id="start-idea"><span class="welcome-path-index">01</span><strong>Describe an idea</strong><span>Talk with Lia from your first thought.</span></button>
+              <button type="button" class="welcome-path" id="start-project"><span class="welcome-path-index">02</span><strong>Analyze a project</strong><span>Bring a file, a public repo, or a fictional sample workspace.</span></button>
+            </div>
+            <div class="starter-prompts" aria-label="Conversation starters">
+              <button type="button" class="starter-prompt" data-prompt="I'm building Bueeld, a product that helps incubators and founders turn scattered startup updates into structured context and a human-approved next mission. Lia already helps founders in chat with mission guidance and expected evidence. For this hackathon, help me shape one small AI co-founder interaction that improves the loop from a founder's blocker to a measurable next mission and proof. Start by identifying the riskiest assumption and proposing two ways to test it this week. Treat missing traction or customer results as unknown; do not invent them.">Work on Bueeld</button>
+              <button type="button" class="starter-prompt" data-prompt="Atelier Loop is a fictional circular-delivery startup. We interviewed 12 shop owners; three are ready to pilot. We do not know route density or collection cost. Challenge our decision to launch a neighborhood pilot now versus validating economics for another month.">Challenge a pilot decision</button>
+              <button type="button" class="starter-prompt" data-prompt="I have an early-stage startup idea. Act as my co-founder: ask me the most important question first, then help me identify the riskiest assumption and a small test.">Pressure-test an idea</button>
+              <button type="button" class="starter-prompt" data-prompt="Help me turn a startup goal into concrete actions for this week. Ask what you need to know before proposing a plan, and make the decision points explicit.">Plan the next week</button>
+            </div>
+          </div>
+          <section class="chat-onboarding" id="chat-onboarding" aria-labelledby="onboarding-question" hidden>
+            <div class="onboarding-top"><span id="onboarding-progress">GETTING STARTED</span><button type="button" id="onboarding-skip-all">Skip setup</button></div>
+            <p class="onboarding-label">A quick start with Lia</p>
+            <h2 id="onboarding-question"></h2>
+            <p id="onboarding-help"></p>
+            <div class="onboarding-options" id="onboarding-options"></div>
+            <form id="onboarding-form"><label for="onboarding-input">Or answer in your own words</label><div class="onboarding-input-row"><input id="onboarding-input" type="text" maxlength="350" autocomplete="off" placeholder="Type your answer…" /><button type="submit">Continue</button></div></form>
+            <div class="onboarding-nav"><button type="button" id="onboarding-back">Back</button><button type="button" id="onboarding-skip">Skip this question</button></div>
+            <p class="onboarding-foot">Answers save to your Lab account as you go. Lia uses them for one first mission proposal; missing facts stay unknown.</p>
+          </section>
+          <ol class="chat-messages" id="chat-messages"></ol>
+          <div class="chat-typing" id="chat-typing" role="status" aria-live="polite" hidden><span class="typing-indicator" aria-hidden="true"></span><span>Lia is thinking</span><span class="typing-dots" aria-hidden="true"><i></i><i></i><i></i></span></div>
+          <div class="mission-conversation" id="mission-conversation" tabindex="-1" hidden>
+            <section class="mission-tracker-section mission-current-section" aria-labelledby="mission-current-title">
+            <div class="mission-section-head"><div><p class="mission-panel-kicker">LIA · NEXT MISSION</p><h3 id="mission-current-title" class="visually-hidden">Your next move</h3></div><span class="mission-current-status" id="mission-current-status"></span></div>
+            <div class="mission-steps" id="mission-steps" aria-label="Mission steps"><span data-mission-step="approve">1 <strong>Approve</strong></span><span data-mission-step="evidence">2 <strong>Add result</strong></span><span data-mission-step="complete">3 <strong>Learn &amp; earn</strong></span></div>
+            <div id="mission-current" hidden>
+              <div class="mission-current-focus"><h4 id="mission-current-heading"></h4><p class="mission-current-content" id="mission-current-content"></p></div>
+              <div class="mission-current-actions"><button type="button" class="mission-primary-button" id="mission-current-approve">Approve mission</button><button type="button" class="mission-primary-button" id="mission-add-evidence" hidden>Add my result</button><button type="button" class="mission-secondary-button" id="mission-help">Help me do this</button><button type="button" class="mission-text-button" id="mission-current-discuss">Discuss with Lia</button></div>
+              <p class="mission-reward-hint" id="mission-reward-hint">+25 XP with real evidence</p>
+              <details class="mission-current-details" id="mission-current-details"><summary>Full mission details</summary><p id="mission-current-full"></p></details>
+              <form class="mission-proof-form" id="mission-proof-form" hidden>
+                <p class="mission-proof-help">Record what happened. A missed target still counts as learning.</p>
+                <label for="mission-evidence-entry">Observed evidence</label>
+                <textarea id="mission-evidence-entry" rows="4" maxlength="1500" placeholder="What did you actually observe? Include a measure, source, or concrete result."></textarea>
+                <div class="mission-proof-fields">
+                  <div><label for="mission-evidence-area">Evidence area</label><select id="mission-evidence-area"><option value="">Choose an area</option><option value="need">Customer need</option><option value="demand">Demand</option><option value="delivery">Delivery</option><option value="economics">Business model</option></select></div>
+                  <div><label for="mission-evidence-outcome">Test outcome</label><select id="mission-evidence-outcome"><option value="">Choose an outcome</option><option value="met">Target met</option><option value="missed">Target missed</option><option value="inconclusive">Inconclusive</option></select></div>
+                </div>
+                <label class="mission-attestation"><input type="checkbox" id="mission-real-evidence" /> This is a real observation from my project, not the fictional sample workspace.</label>
+                <div class="mission-proof-actions"><button type="button" class="mission-text-button" id="mission-use-chat-evidence">Use latest chat evidence</button><div class="mission-proof-submit"><button type="button" class="mission-text-button" id="mission-evidence-cancel">Cancel</button><button type="submit" class="mission-primary-button" id="mission-save-evidence">Save result</button></div></div>
+              </form>
+              <div class="mission-completion" id="mission-completion" hidden><p id="mission-saved-evidence"></p><button type="button" class="mission-primary-button" id="mission-complete">Complete mission</button><small>Your local confirmation; no external test is run.</small></div>
+            </div>
+            <p class="mission-feedback" id="mission-feedback" role="status" aria-live="polite"></p>
+          </section>
+          </div>
+          <section class="mission-reward-card" id="mission-reward-card" aria-labelledby="mission-reward-title" tabindex="-1" hidden>
+            <div class="mission-reward-top"><span class="mission-reward-icon" aria-hidden="true">✓</span><div><p class="mission-panel-kicker">ONE STEP FORWARD</p><h3 id="mission-reward-title">You turned a question into learning.</h3></div><strong class="mission-reward-value" id="mission-reward-value">+25 XP</strong></div>
+            <p id="mission-reward-description">Your result is saved. Keep building on what you learned.</p>
+            <div class="mission-milestone-badges" id="mission-reward-milestones" aria-label="Milestones reached"></div>
+            <div class="mission-reward-level"><progress id="mission-reward-progress" max="50" value="0" aria-label="Progress toward next Lab level"></progress><span id="mission-reward-next">One more test to the next level</span></div>
+            <div class="mission-reward-actions"><button type="button" class="mission-primary-button" id="mission-next-chat">Choose the next mission</button><button type="button" class="mission-text-button" id="mission-reward-history">View progress</button></div>
+          </section>
+          <section class="mission-learning-card" id="mission-learning-card" aria-labelledby="mission-learning-title" tabindex="-1" hidden>
+            <div class="mission-learning-heading"><p class="mission-panel-kicker">LIA · LEARNING TO ACTION</p><h3 id="mission-learning-title">What this result changes</h3></div>
+            <div id="mission-learning-content" hidden>
+              <span class="learning-recommendation" id="learning-recommendation"></span>
+              <dl class="mission-learning-grid">
+                <div><dt>Assumption</dt><dd id="learning-assumption"></dd></div>
+                <div><dt>Observation</dt><dd id="learning-observation"></dd></div>
+                <div><dt>Decision</dt><dd id="learning-decision"></dd></div>
+                <div class="mission-learning-next"><dt>Next test</dt><dd id="learning-next"></dd></div>
+              </dl>
+            </div>
+            <p class="learning-status" id="learning-status" role="status" aria-live="polite"></p>
+            <div class="mission-learning-actions"><button type="button" class="mission-primary-button" id="mission-review-result">Review result with Lia</button><button type="button" class="mission-primary-button" id="mission-use-learning" hidden>Plan this next step</button><button type="button" class="mission-text-button" id="mission-copy-learning" hidden>Copy learning</button></div>
+          </section>
+          <div class="mission-chat-empty" id="mission-chat-empty" hidden><p>Ready to put an idea to the test?</p><button type="button" class="mission-secondary-button" id="mission-chat-ask">Find my next mission <span aria-hidden="true">↗</span></button></div>
+        </div>
+
+        <div class="composer-dock">
+          <details class="project-memory-panel" id="project-memory-panel">
+            <summary id="project-memory-summary">What Lia knows</summary>
+            <form id="project-memory-form">
+              <div class="project-memory-fields">
+                <div><label for="memory-project">Project</label><input id="memory-project" name="project" type="text" maxlength="350" autocomplete="off" placeholder="What are you building?" /></div>
+                <div><label for="memory-target">Target audience</label><input id="memory-target" name="target" type="text" maxlength="350" autocomplete="off" placeholder="Who is it for?" /></div>
+                <div><label for="memory-goal">Current goal</label><input id="memory-goal" name="goal" type="text" maxlength="350" autocomplete="off" placeholder="What do you want to achieve?" /></div>
+                <div><label for="memory-blocker">Main blocker</label><input id="memory-blocker" name="blocker" type="text" maxlength="350" autocomplete="off" placeholder="What is holding you back?" /></div>
+              </div>
+              <div class="project-memory-actions"><p id="memory-status" role="status" aria-live="polite"></p><button type="submit" class="mission-secondary-button" id="memory-save">Save context</button></div>
+            </form>
+          </details>
+          <div class="chat-shortcuts" id="chat-shortcuts" hidden>
+            <span>Continue the conversation</span>
+            <button type="button" class="followup-prompt" data-prompt="Turn your last recommendation into concrete actions for this week, with an owner and a measure for each action. Do not invent completed work.">Plan this week's actions</button>
+            <button type="button" class="followup-prompt" data-demo-only="true" data-prompt="In this fictional Atelier Loop demo, the return rate was 68% against a 70% target. What changes in your recommendation, and what should we test next?">Demo: missed 70% target</button>
+          </div>
+          <div class="active-sources" id="active-sources" hidden><span class="active-sources-label">PROJECT CONTEXT</span><span id="active-sources-names"></span><button type="button" id="manage-sources">Manage</button></div>
+          <div class="mission-bar" id="mission-bar" hidden aria-live="polite">
+            <div class="mission-summary"><span class="mission-kicker" id="mission-status">Mission proposed</span><p id="mission-excerpt"></p></div>
+            <div class="mission-actions"><button type="button" id="mission-approve" hidden>Approve</button><button type="button" id="mission-evidence">Add result</button><button type="button" id="mission-open-tracker" aria-expanded="false" aria-controls="mission-conversation">Current mission</button><button type="button" id="mission-unpin" title="Unpin mission" aria-label="Unpin mission">×</button></div>
+          </div>
+          <div class="attached-file" id="attached-file" hidden>
+            <span class="attached-file-icon" aria-hidden="true">PDF</span>
+            <span class="attached-file-details"><strong id="attached-file-name"></strong><small id="attached-file-meta">Ready to analyze</small></span>
+            <button type="button" id="attached-file-analyze">Analyze &amp; use in chat</button>
+            <button type="button" id="attached-file-remove" aria-label="Remove attached file">×</button>
+          </div>
+          <form class="chat-composer" id="chat-form">
+            <button type="button" class="composer-tool composer-attach" id="attach-file" aria-label="Attach a file" title="Attach a file"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m21.4 11.6-8.6 8.6a6 6 0 0 1-8.5-8.5l9.2-9.2a4 4 0 0 1 5.7 5.7l-9.3 9.3a2 2 0 0 1-2.8-2.8l8.7-8.7" /></svg></button>
+            <input id="chat-file-input" class="visually-hidden" type="file" accept=".pdf,.txt,.md,.csv,.json,.eml,.ics,application/pdf,text/plain,text/markdown,text/csv,application/json,message/rfc822,text/calendar" tabindex="-1" aria-hidden="true" />
+            <button type="button" class="composer-tool composer-sources" id="chat-connectors" aria-label="Open connectors" title="Connectors">Connectors</button>
+            <label class="visually-hidden" for="chat-input">Message Lia</label>
+            <textarea id="chat-input" name="message" rows="1" maxlength="1500" placeholder="Ask Lia a question…" required></textarea>
+            <button class="chat-send" id="chat-send" type="submit" aria-label="Send message to Lia" disabled>Send</button>
+          </form>
+          <div class="chat-meta"><span>Enter sends · Shift + Enter adds a line</span><span id="chat-count">0 / 1500</span></div>
+          <p class="chat-status" id="chat-status" role="status" aria-live="polite"></p>
+          <div class="account-save-row" id="account-save-row" role="status" aria-live="polite" hidden><span id="account-save-label">Saved to Lab</span><button type="button" id="account-save-retry" hidden>Retry save</button></div>
+          <p class="demo-quota-alert" id="demo-quota-alert" role="status" aria-live="polite" hidden></p>
+          <details class="privacy-disclosure"><summary>Privacy &amp; AI use</summary><p id="demo-usage">Shared demo AI calls: checking allowance…</p><p>Your transcript, pinned mission, mission history, local Lab points, drops, and areas explored are saved in this browser per account; mission history can be cleared in Progress. Saved project context stays in this browser and syncs to your Lab account when signed in. When you send, your message, recent conversation, pinned mission, saved project context, and selected source summaries go to AdaL; the connected ChatGPT account may process them. Files are read in your browser only when you choose Analyze; extracted text then goes to AdaL. Connected account items are fetched and sent for analysis only when you select them and click Analyze. Source cards clear on reload; related local chat replies remain until New chat. A server-saved copy remains until you delete it in Account. Review result with Lia sends the mission, your reported evidence, outcome, and saved project context to AdaL. Reviews are recommendations and use one AI call. Mission approval and evidence are human decisions. Signed-in chats, setup answers, selected summaries, and mission history sync to this Lab server automatically. Guest drafts are sent only if you explicitly copy and save them. Saved conversations can be removed from Account. This prototype does not execute outside actions.</p></details>
+          <nav class="lab-legal-links" aria-label="Lab policies"><a href="/privacy.html" target="_blank" rel="noopener">Privacy</a><a href="/terms.html" target="_blank" rel="noopener">Terms</a></nav>
+          <p class="chat-storage-warning" id="chat-storage-warning" role="status" aria-live="polite" hidden>Browser storage is unavailable. This conversation will be lost when you close the page.</p>
+        </div>
+      </section>
+    </main>
+
+
+
+    <div class="account-drawer" id="account-drawer" hidden>
+      <button class="account-backdrop" id="account-backdrop" type="button" aria-label="Close account"></button>
+      <section class="account-panel" id="account-panel" role="dialog" aria-modal="true" aria-labelledby="account-title" tabindex="-1">
+        <header class="account-panel-header"><div><p class="account-kicker">BUEELD LAB</p><h2 id="account-title">Account &amp; conversations</h2><p>A small demo account for returning to your work.</p></div><button type="button" class="account-close" id="account-close">Close</button></header>
+        <div class="account-panel-scroll">
+          <p class="account-note">A temporary Lab account saves your chats and missions. Use a unique password; there is no email verification or recovery.</p>
+          <details class="account-privacy"><summary>Privacy and storage</summary><p>This account is separate from Bueeld. Signed-in chats, setup answers, selected source summaries, project context, mission history, and saved learning reviews save automatically on this Lab server. Guest drafts remain in this browser until you explicitly copy and save them. Your password is never stored in this browser. Raw files and OAuth tokens are excluded from saved chats, but Lia's replies may quote or summarize private source material.</p></details>
+          <p class="account-status" id="account-status" role="status" aria-live="polite"></p>
+          <div id="account-signed-out">
+            <div class="account-guest-restore" id="account-guest-restore" hidden><p>A previous local guest draft is hidden on this shared browser.</p><button type="button" id="account-restore-guest">Restore local guest draft</button></div>
+            <div class="account-tabs" role="group" aria-label="Account action"><button type="button" id="account-login-tab" aria-pressed="true">Sign in</button><button type="button" id="account-signup-tab" aria-pressed="false">Create account</button></div>
+            <form id="account-form" class="account-form"><label for="account-email">Email</label><input id="account-email" type="email" maxlength="254" autocomplete="email" required /><label for="account-password">Password</label><input id="account-password" type="password" minlength="12" maxlength="128" autocomplete="current-password" required /><p id="account-password-hint">At least 12 characters.</p><button type="submit" class="account-primary" id="account-submit">Sign in</button></form>
+          </div>
+          <div id="account-signed-in" hidden>
+            <div class="account-profile"><div><span>Signed in as</span><strong id="account-email-display"></strong></div><button type="button" id="account-logout">Sign out</button></div>
+            <section class="account-section" aria-labelledby="account-current-title"><h3 id="account-current-title">Current chat</h3><p id="account-current-summary">Signed-in work saves automatically.</p><label for="account-chat-title">Title</label><input id="account-chat-title" maxlength="120" placeholder="Name this conversation" /><div class="account-actions"><button type="button" class="account-primary" id="account-save-chat">Save chat &amp; mission progress</button><button type="button" id="account-copy-guest" hidden>Copy guest chat locally</button></div></section>
+            <section class="account-section" aria-labelledby="account-history-title"><div class="account-section-head"><h3 id="account-history-title">Saved conversations</h3><button type="button" id="account-refresh">Refresh</button></div><div class="account-conversations" id="account-conversations"></div></section>
+            <details class="account-danger"><summary>Delete this demo account</summary><p>This permanently deletes the Lab account, saved chats, mission history, and its connected-source sessions. This cannot be undone.</p><label for="account-delete-password">Confirm your Lab password</label><input id="account-delete-password" type="password" minlength="12" maxlength="128" autocomplete="current-password" /><button type="button" id="account-delete">Permanently delete Lab account</button></details>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <div class="mission-drawer" id="mission-drawer" hidden>
+      <button class="mission-backdrop" id="mission-backdrop" type="button" aria-label="Close progress"></button>
+      <section class="mission-panel" id="mission-panel" role="dialog" aria-modal="true" aria-labelledby="mission-title" tabindex="-1">
+        <header class="mission-panel-header">
+          <div class="mission-hero-art" aria-hidden="true"><img src="/assets/progress-hero.png" alt="" width="1024" height="1024" /><span id="mission-level-badge">1</span></div>
+          <div class="mission-hero-copy">
+            <p class="mission-panel-kicker">BUEELD LAB <span>YOUR PROGRESS</span></p>
+            <h2 id="mission-title">Build. Test. Grow.</h2>
+            <p class="mission-hero-subtitle">Small tests. Real momentum.</p>
+            <div class="mission-level-summary"><p>LEVEL <span id="mission-level">1</span></p><span id="mission-level-next">2 tests to level 2</span></div>
+            <div class="mission-level-track"><progress id="mission-level-progress" max="2" value="0" aria-label="Real tests completed toward your next level">0 of 2</progress><img src="/assets/icons/progress-circle.svg" alt="" /><img src="/assets/icons/progress-circle.svg" alt="" /></div>
+          </div>
+          <button type="button" class="mission-panel-close" id="mission-close" aria-label="Close progress"><img src="/assets/icons/progress-close.svg" alt="" width="20" height="20" /></button>
+        </header>
+        <div class="progress-stage">
+          <section class="progress-view progress-overview" id="progress-view-overview" data-progress-view="overview" role="tabpanel" aria-labelledby="progress-tab-overview">
+            <section class="mission-metrics" aria-label="Your Lab rewards">
+              <div class="mission-metric"><img src="/assets/icons/progress-star.svg" alt="" width="26" height="26" /><strong id="mission-xp">0</strong><span>Lab XP</span></div>
+              <div class="mission-metric"><img src="/assets/icons/progress-drop.svg" alt="" width="26" height="26" /><strong id="mission-drops">0</strong><span>Drops</span></div>
+            </section>
+            <section class="mission-evidence-overview" aria-labelledby="mission-evidence-title">
+              <div class="mission-evidence-heading"><h3 id="mission-evidence-title">Areas explored</h3><p id="mission-coverage-count" hidden>0 / 4</p><strong id="mission-maturity">0 / 4</strong></div>
+              <progress class="visually-hidden" id="mission-maturity-progress" max="100" value="0" aria-label="Areas explored">0%</progress>
+              <div class="mission-coverage" id="mission-coverage" role="group" aria-label="Explored evidence areas"></div>
+            </section>
+            <section class="mission-notice-section" id="mission-notice-section" aria-labelledby="mission-notice-title" hidden><h3 id="mission-notice-title" class="visually-hidden">Level reached</h3><ul class="mission-notices" id="mission-notices"></ul></section>
+            <div class="progress-primary-action">
+              <div id="mission-current-empty" class="mission-current-empty"><button type="button" class="mission-primary-button mission-start-button" id="mission-ask-lia"><span>Find a mission with Lia</span><img src="/assets/icons/progress-arrow.svg" alt="" width="20" height="20" /></button></div>
+              <button type="button" class="mission-return-chat" id="mission-return-chat" hidden><span>Continue your mission</span><img src="/assets/icons/progress-arrow.svg" alt="" width="20" height="20" /></button>
+            </div>
+          </section>
+          <section class="progress-view progress-history-view" id="progress-view-history" data-progress-view="history" role="tabpanel" aria-labelledby="progress-tab-history" hidden>
+            <div class="progress-view-heading"><div><h3>Mission history</h3></div><button type="button" class="mission-text-button" id="mission-clear-history">Clear history</button></div>
+            <ol class="mission-history" id="mission-history-list"></ol>
+            <div class="progress-history-pagination" id="progress-history-pagination" hidden><button type="button" id="progress-history-prev" aria-label="Previous mission"><img src="/assets/icons/progress-chevron.svg" alt="" width="18" height="18" /></button><span id="progress-history-page" role="status" aria-live="polite">0 missions</span><button type="button" id="progress-history-next" aria-label="Next mission"><img src="/assets/icons/progress-chevron.svg" alt="" width="18" height="18" /></button></div>
+          </section>
+          <section class="progress-view progress-help-view" id="progress-view-help" data-progress-view="help" role="tabpanel" aria-labelledby="progress-tab-help" hidden>
+            <div class="progress-rules" aria-label="How rewards work"><p><strong>+25 XP</strong><span>per real test</span></p><p><strong>2 tests</strong><span>per level</span></p><p><strong>+10 drops</strong><span>per new level</span></p></div>
+            <div class="mission-milestones" id="mission-milestones" role="group" aria-label="Learning milestones"></div>
+            <p class="progress-help-note">Based on your reported evidence. Demo tests earn no points; rewards have no cash value.</p>
+          </section>
+        </div>
+        <nav class="progress-tabs" role="tablist" aria-label="Progress views">
+          <button type="button" id="progress-tab-overview" data-progress-tab="overview" role="tab" aria-controls="progress-view-overview" aria-selected="true" tabindex="0"><img src="/assets/icons/progress-star.svg" alt="" width="18" height="18" /><span>Overview</span></button>
+          <button type="button" id="progress-tab-history" data-progress-tab="history" role="tab" aria-controls="progress-view-history" aria-selected="false" tabindex="-1"><img src="/assets/icons/progress-history.svg" alt="" width="18" height="18" /><span>History</span><span class="mission-history-count" id="mission-history-count">0</span></button>
+          <button type="button" id="progress-tab-help" data-progress-tab="help" role="tab" aria-controls="progress-view-help" aria-selected="false" tabindex="-1"><img src="/assets/icons/progress-book.svg" alt="" width="18" height="18" /><span>How it works</span></button>
+        </nav>
+        <p class="mission-progress-footnote">Self-reported progress <span aria-hidden="true">·</span> Demo rewards</p>
+      </section>
+    </div>
+
+    <div class="source-drawer" id="source-drawer" hidden>
+      <button class="source-backdrop" id="source-backdrop" type="button" aria-label="Close project sources"></button>
+      <section class="source-panel" id="source-panel" role="dialog" aria-modal="true" aria-labelledby="source-title" tabindex="-1">
+        <header class="source-header">
+          <div><p class="source-kicker">BUEELD LAB</p><h2 id="source-title">Project sources</h2><p>Give Lia concrete context, then choose which summaries to bring into chat.</p></div>
+          <button type="button" class="source-close" id="source-close">Close</button>
+        </header>
+        <div class="source-scroll">
+          <p class="source-intro">Bring project context into Lia. Only what you select for analysis is sent to AdaL.</p>
+          <p class="source-status" id="source-status" role="status" aria-live="polite"></p>
+
+          <section class="source-section source-sample" aria-labelledby="sample-title">
+            <div class="source-section-heading"><div><span class="source-eyebrow">FICTIONAL DEMO</span><h3 id="sample-title">Try sample workspace</h3></div><span class="source-badge">4 sample records</span></div>
+            <p>Atelier Loop is fictional. These dated records are sample content, not data from connected accounts.</p>
+            <details class="sample-record-details"><summary>View 4 fictional records</summary><ul class="sample-records">
+              <li><span>AL-MAIL-01 · Sep 21</span><strong>Prospect email</strong><small>One shop is open to a trial; no signed commitment.</small></li>
+              <li><span>AL-DRIVE-02 · Sep 22</span><strong>Interview notes</strong><small>Twelve interviews, three interested shops; route cost unknown.</small></li>
+              <li><span>AL-CAL-03 · Sep 24</span><strong>Planning event</strong><small>Pilot planning is scheduled; no outcome recorded.</small></li>
+              <li><span>AL-NOTION-04 · Sep 25</span><strong>Decision note</strong><small>Pilot versus further cost validation remains open.</small></li>
+            </ul></details>
+            <button type="button" class="source-primary" id="analyze-sample" disabled>Analyze fictional workspace with Lia</button>
+          </section>
+
+          <section class="source-section" aria-labelledby="local-source-title">
+            <div class="source-section-heading"><div><span class="source-eyebrow">YOUR OWN FILE</span><h3 id="local-source-title">Import a file</h3></div><span class="source-availability" id="local-availability">Checking availability…</span></div>
+            <p>Analyze a PDF or text export. Selectable PDF text only; scanned images need OCR. <span class="source-format-extra">.txt, .md, .csv, .json, .eml and .ics also work. Only the text you choose to Analyze goes to AdaL.</span></p>
+            <p class="source-import-hint" id="source-import-hint" hidden></p>
+            <form id="local-source-form" class="source-inline-form">
+              <label for="local-source-file">File to analyze</label>
+              <input id="local-source-file" type="file" accept=".pdf,.txt,.md,.csv,.json,.eml,.ics,application/pdf,text/plain,text/markdown,text/csv,application/json,message/rfc822,text/calendar" disabled />
+              <button type="submit" class="source-primary" id="analyze-local" disabled>Analyze file with Lia</button>
+            </form>
+          </section>
+
+          <section class="source-section" aria-labelledby="github-source-title">
+            <div class="source-section-heading"><div><span class="source-eyebrow">PUBLIC REPOSITORY</span><h3 id="github-source-title">GitHub</h3></div><span class="source-availability" id="github-availability">Checking availability…</span></div>
+            <p>Analyze public repository metadata and README. Private repositories and personal GitHub access are not available here.</p>
+            <form id="github-source-form" class="source-inline-form">
+              <label for="github-repository">Repository</label>
+              <input id="github-repository" name="repository" type="text" maxlength="180" placeholder="owner/repo" autocomplete="off" spellcheck="false" disabled />
+              <button type="submit" class="source-primary" id="analyze-github" disabled>Analyze public repo with Lia</button>
+            </form>
+          </section>
+
+          <section class="source-section" aria-labelledby="connectors-title">
+            <div class="source-section-heading"><div><span class="source-eyebrow">WORKSPACE CONNECTORS</span><h3 id="connectors-title" tabindex="-1">Connectors</h3></div></div>
+            <p>Connect your own accounts to choose what Lia can analyze.</p>
+            <div class="connector-account-gate" id="connector-account-gate" hidden>
+              <p>Sign in to Lab to connect Gmail, Drive, Calendar, or Notion.</p>
+              <div><button type="button" class="source-primary" id="connector-sign-in">Sign in</button><button type="button" id="connector-create-account">Create account</button></div>
+            </div>
+            <div class="connector-grid" id="source-connectors" aria-live="polite"></div>
+          </section>
+
+          <section class="source-section" id="connector-items-section" aria-labelledby="connector-items-title" hidden>
+            <div class="source-section-heading"><div><span class="source-eyebrow">CONNECTED ACCOUNT</span><h3 id="connector-items-title">Choose items</h3></div></div>
+            <p id="connector-items-intro">Select up to four items to analyze. Only selected text goes to AdaL.</p>
+            <div class="connector-items-list" id="connector-items-list"></div>
+            <div class="connector-item-actions"><button type="button" class="source-primary" id="connector-import" disabled>Analyze selected with Lia</button><button type="button" id="connector-items-close">Close list</button></div>
+          </section>
+
+          <section class="source-section" id="source-results" aria-labelledby="source-results-title" hidden>
+            <div class="source-section-heading"><div><span class="source-eyebrow">ADAL ANALYSIS</span><h3 id="source-results-title">Analyzed context</h3></div></div>
+            <div class="source-results-list" id="source-results-list"></div>
+            <div class="source-discuss"><p>Select up to three summaries. Their summaries, not the raw files, accompany your next chat messages.</p><button type="button" class="source-primary" id="discuss-sources" disabled>Discuss selected sources with Lia</button></div>
+          </section>
+        </div>
+      </section>
+    </div>
+
+    <div class="decision-drawer" id="decision-drawer" hidden>
+      <button class="decision-backdrop" id="decision-backdrop" type="button" aria-label="Close decision canvas"></button>
+      <section class="decision-panel" id="decision-panel" role="dialog" aria-modal="true" aria-labelledby="decision-title" tabindex="-1">
+        <header class="decision-header">
+          <div><p class="decision-kicker">BUEELD LAB</p><h2 id="decision-title">Decision canvas</h2><p>Make one option, experiment, and success bar explicit.</p></div>
+          <div class="decision-header-actions"><button type="button" class="button button-outline" id="use-chat-context" disabled>Use this conversation</button><button type="button" class="decision-close" id="decision-close" aria-label="Close decision canvas">Close</button></div>
+        </header>
+        <div class="decision-drawer-content">
+      <div class="workspace-layout">
+        <aside class="sidebar" aria-label="Decision process">
+          <div class="sidebar-card">
+            <p class="sidebar-label">THE DECISION LOOP</p>
+            <ol class="step-list" id="step-list">
+              <li class="step-item" data-step="brief"><span class="step-number">01</span><span><strong>Frame the signal</strong><small>Founder brief + evidence</small></span></li>
+              <li class="step-item" data-step="plan"><span class="step-number">02</span><span><strong>Challenge the bet</strong><small>Options + experiment</small></span></li>
+              <li class="step-item" data-step="approve"><span class="step-number">03</span><span><strong>Set the bar</strong><small>Human approval</small></span></li>
+              <li class="step-item" data-step="review"><span class="step-number">04</span><span><strong>Follow the evidence</strong><small>Reassess the decision</small></span></li>
+            </ol>
+            <div class="sidebar-footnote"><span class="tiny-spark" aria-hidden="true">✳</span><p>Built for founders who would rather learn something true than hear a confident guess.</p></div>
+          </div>
+          <div class="trust-note"><span aria-hidden="true">◎</span><p>Your draft and decision log stay in this browser. Your brief and evidence are sent to AdaL only when you request an analysis.</p></div>
+        </aside>
+
+        <div class="content-stack">
+          <section class="panel brief-panel" id="brief-section" aria-labelledby="brief-title">
+            <div class="section-topline"><span class="section-index">01 / FRAME THE SIGNAL</span><span class="section-state" id="brief-state">READY TO START</span></div>
+            <div class="section-intro"><h2 id="brief-title">What is the founder facing?</h2><p>Give AdaL the situation and the evidence you actually have. The Atelier Loop example is fictional and ready to try.</p></div>
+            <form id="plan-form" novalidate>
+              <div class="field"><label for="brief-input">Founder brief <span class="required">*</span></label><textarea id="brief-input" name="brief" rows="5" required spellcheck="true"></textarea><p class="field-help">Describe the decision, the constraints, and what a useful next step would answer.</p></div>
+              <div class="field"><label for="evidence-input">Evidence so far <span class="required">*</span></label><textarea id="evidence-input" name="evidence" rows="4" required spellcheck="true"></textarea><p class="field-help">Interviews, commitments, numbers, or gaps. Separate observations from assumptions.</p></div>
+              <div class="form-actions"><button class="button button-primary" type="submit" id="plan-button">Ask AdaL to shape the decision <span aria-hidden="true">↗</span></button><span class="action-hint">AI draft · human judgment</span></div>
+              <p class="form-status" id="plan-status" role="status" aria-live="polite"></p>
+            </form>
+          </section>
+
+          <section class="panel" id="plan-section" aria-labelledby="plan-title" hidden>
+            <div class="section-topline"><span class="section-index">02 / CHALLENGE THE BET</span><span class="source-badge">GENERATED WITH ADAL</span></div>
+            <div class="section-intro"><h2 id="plan-title">A decision, not just an answer.</h2><p>Review the assumptions and alternatives before you commit to a test.</p></div>
+
+            <div class="plan-block"><h3>What we know</h3><ul class="fact-list" id="facts-list"></ul></div>
+            <div class="assumption-box"><div><p class="small-heading">THE RISKY ASSUMPTION</p><p class="assumption-statement" id="assumption-statement"></p></div><div class="assumption-meta"><div><span>IF WE'RE WRONG</span><p id="assumption-impact"></p></div><div><span>AI CONFIDENCE</span><p id="assumption-confidence"></p></div></div></div>
+            <div class="plan-block"><h3>Paths worth considering</h3><div class="option-grid" id="options-list"></div>
+              <fieldset class="option-choice-fieldset" id="option-choice-fieldset"><legend class="small-heading">YOUR CALL &mdash; CHOOSE ONE OPTION</legend><div class="option-choice-list" id="option-choice-list"></div></fieldset>
+              <p class="field-help" id="option-choice-help">Pick the option you would act on. Required before you can approve the experiment below.</p>
+            </div>
+            <div class="experiment-card"><div class="experiment-title"><div><p class="small-heading">RECOMMENDED EXPERIMENT</p><h3 id="experiment-description"></h3></div></div><div class="experiment-details"><div><span>MEASURE</span><strong id="experiment-metric"></strong></div><div><span>TIMEBOX</span><strong id="experiment-duration"></strong></div></div><div class="evidence-checklist"><p>Evidence to collect</p><ul id="evidence-list"></ul></div></div>
+
+            <form id="approval-form" class="approval-form" novalidate><div class="approval-header"><div><p class="small-heading">03 / HUMAN CHECKPOINT</p><h3>Set the success bar.</h3></div><span class="human-badge">YOU DECIDE</span></div><p class="approval-copy">AdaL suggested a threshold. Edit it if needed, then approve the experiment before entering results.</p><div class="threshold-row"><div class="field"><label for="comparison-input">Success means</label><select id="comparison-input" name="comparison"><option value="at_least">At least</option><option value="more_than">More than</option></select></div><div class="field"><label for="threshold-input">Threshold</label><input id="threshold-input" name="threshold" type="number" step="any" required inputmode="decimal" /></div><span id="threshold-unit" class="threshold-unit"></span></div><div class="form-actions"><button class="button button-dark" type="submit" id="approve-button">Approve this experiment <span aria-hidden="true">→</span></button><span class="approval-indicator" id="approval-indicator" role="status" aria-live="polite"></span></div></form>
+          </section>
+
+          <section class="panel" id="result-section" aria-labelledby="result-title" hidden>
+            <div class="section-topline"><span class="section-index">04 / FOLLOW THE EVIDENCE</span><span class="section-state" id="result-state">AWAITING RESULT</span></div>
+            <div class="section-intro"><h2 id="result-title">What did the experiment show?</h2><p>For Atelier Loop, enter a clearly fictional result. For your own project, add measured evidence. AdaL should update its recommendation when a test misses the bar.</p></div>
+            <form id="review-form" novalidate><div class="result-fields"><div class="field"><label for="result-input">Measured result <span class="required">*</span></label><div class="value-field"><input id="result-input" name="result" type="number" step="any" required inputmode="decimal" /><span id="result-unit"></span></div><p class="field-help" id="result-metric-help"></p></div><div class="field"><label for="notes-input">What else did you observe?</label><textarea id="notes-input" name="notes" rows="3" placeholder="For example: buyers liked the concept, but delivery time varied by location."></textarea></div></div><div class="form-actions"><button class="button button-primary" type="submit" id="review-button">Reassess with AdaL <span aria-hidden="true">↗</span></button><span class="action-hint">Based on your approved bar</span></div><p class="form-status" id="review-status" role="status" aria-live="polite"></p></form>
+          </section>
+
+          <section class="panel review-panel" id="review-section" aria-labelledby="review-title" hidden><div class="section-topline"><span class="section-index">THE NEXT MOVE</span><span class="source-badge">REASSESSED WITH ADAL</span></div><div class="review-heading"><span class="outcome-icon" id="outcome-icon" aria-hidden="true"></span><div><span class="outcome-kicker" id="outcome-kicker"></span><h2 id="review-title"></h2></div></div><p class="result-comparison" id="result-comparison"></p><p class="review-rationale" id="review-rationale"></p><div class="next-steps"><h3>Next steps</h3><ol id="next-steps-list"></ol></div></section>
+
+          <section class="panel journal-panel" id="journal-section" aria-labelledby="journal-title"><div class="journal-header"><div><p class="section-index">YOUR LOCAL RECORD</p><h2 id="journal-title">Decision journal</h2></div><button class="button button-outline" type="button" id="export-button" disabled>Export Markdown <span aria-hidden="true">↗</span></button></div><p class="journal-intro">A short history of the AI's proposal and your decisions. It is saved only in this browser.</p><ol class="journal-list" id="journal-list"></ol><button class="text-button" type="button" id="reset-button">Start a fresh scenario</button><p class="storage-warning" id="storage-warning" role="status" aria-live="polite" hidden>Browser storage is unavailable. This draft will be lost when you close the page.</p></section>
+        </div>
+      </div>
+
+        </div>
+      </section>
+    </div>
+  </body>
+</html>

@@ -1,0 +1,321 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="An offline, fictional, pre-written example of Lia's mission-to-learning flow. No live AI or data collection.">
+<title>Lia — Offline guided example</title>
+<style>
+* { box-sizing: border-box; }
+body { margin: 0; padding: 40px 20px; background: #f8f9fc; color: #101828; font: 15px/1.6 system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+button, textarea { font-family: inherit; }
+:focus-visible { outline: 2px solid #6254d8; outline-offset: 3px; }
+.replay-page { width: min(700px, 100%); margin: 4vh auto; padding: 32px; border: 1px solid #e7e4f4; border-radius: 22px; background: white; }
+.replay-label { color: #6254b5; font-size: 12px; font-weight: 650; }
+h1 { margin: 12px 0; font-size: clamp(28px, 5vw, 38px); line-height: 1.2; letter-spacing: -.04em; }
+h2 { margin-top: 28px; font-size: 18px; }
+.replay-page > p { color: #596579; }
+.replay-recap { padding-left: 22px; color: #596579; }
+.replay-recap li { margin: 10px 0; }
+.replay-note { font-size: 12px; color: #667085; }
+.replay-page label { display: block; margin: 24px 0 8px; font-size: 13px; font-weight: 600; }
+.replay-page textarea { display: block; width: 100%; padding: 12px; border: 1px solid #dcd8ef; border-radius: 10px; resize: vertical; font-size: 14px; }
+@media (max-width: 560px) { body { padding: 16px; } .replay-page { margin: 0; padding: 24px; } }
+@media print { .tour-overlay, #start-demo, .replay-page textarea, .replay-page label { display: none !important; } .replay-page { margin: 0; padding: 0; border: 0; } }
+/* Guided example: isolated from the real conversation and project state. */
+.tour-overlay[hidden] { display: none; }
+.tour-overlay { position: fixed; inset: 0; z-index: 120; display: grid; place-items: center; padding: 24px; background: rgba(16, 24, 40, .34); backdrop-filter: blur(5px); }
+.tour-dialog { display: flex; flex-direction: column; width: min(680px, 100%); max-height: min(860px, calc(100dvh - 48px)); min-height: 0; overflow: hidden; border: 1px solid #e7e4f4; border-radius: 22px; background: #fff; box-shadow: 0 28px 90px rgba(22, 18, 57, .22); color: #101828; text-align: left; }
+.tour-header { display: flex; flex: 0 0 auto; align-items: flex-start; justify-content: space-between; gap: 14px; padding: 24px 28px 20px; }
+.tour-header h2 { margin: 0; font-size: 22px; font-weight: 650; line-height: 1.25; letter-spacing: -.035em; }
+.tour-disclosure { margin: 8px 0 0; color: #6254a7; font-size: 11px; font-weight: 550; line-height: 1.5; }
+.tour-close { display: grid; flex: 0 0 32px; place-items: center; width: 32px; min-height: 32px; padding: 0; border: 0; border-radius: 9px; background: #f3f2f7; color: #596579; font: inherit; font-size: 23px; line-height: 1; cursor: pointer; }
+.tour-close:hover { background: #eae7f7; color: #40378f; }
+.tour-progress { display: flex; flex: 0 0 auto; gap: 8px; margin: 0; padding: 0 28px 20px; list-style: none; border-bottom: 1px solid #eeedf5; }
+.tour-progress-item { display: flex; flex: 1 1 0; align-items: center; gap: 7px; min-width: 0; color: #687084; font-size: 11px; }
+.tour-step-number { display: grid; flex: 0 0 22px; place-items: center; width: 22px; height: 22px; border-radius: 50%; background: #f2f3f6; font-size: 10px; }
+.tour-progress-item.is-current { color: #5146bd; font-weight: 650; }
+.tour-progress-item.is-current .tour-step-number { background: #6254d8; color: #fff; }
+.tour-progress-item.is-complete .tour-step-number { background: #e6f7f3; color: #087c77; }
+.tour-content { flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 24px 28px; }
+.tour-step-kicker, .tour-card-kicker { margin: 0 0 7px; color: #6254b5; font-size: 9px; font-weight: 700; letter-spacing: .1em; line-height: 1.5; }
+.tour-step-title { margin: 0 0 22px; font-size: 21px; font-weight: 600; letter-spacing: -.03em; line-height: 1.3; }
+.tour-step-title:focus { outline: none; }
+.tour-message { margin: 0 0 18px; }
+.tour-message-founder { max-width: 92%; margin-left: auto; padding: 15px 17px; border-radius: 16px 16px 4px 16px; background: #f3f4f8; }
+.tour-author { margin: 0 0 5px; color: #716b84; font-size: 10px; font-weight: 600; }
+.tour-message-text { margin: 0; color: #344054; font-size: 13px; line-height: 1.65; }
+.tour-mission, .tour-learning { margin: 18px 0 14px; padding: 19px 20px; border: 1px solid #e1ddf5; border-radius: 14px; background: #fcfbff; }
+.tour-learning { border-color: #cde9e4; background: #f5fbfa; }
+.tour-learning .tour-card-kicker { color: #087c77; }
+.tour-mission h4 { margin: 0 0 15px; font-size: 16px; line-height: 1.4; font-weight: 600; letter-spacing: -.02em; }
+.tour-details { display: grid; gap: 14px; margin: 12px 0 0; }
+.tour-detail { display: grid; grid-template-columns: 105px minmax(0, 1fr); gap: 12px; }
+.tour-detail dt { color: #5c6174; font-size: 11px; font-weight: 600; line-height: 1.65; }
+.tour-detail dd { margin: 0; color: #344054; font-size: 12px; line-height: 1.65; }
+.tour-note { margin: 14px 0 0; color: #6a7284; font-size: 11px; line-height: 1.6; }
+.tour-navigation { display: flex; flex: 0 0 auto; align-items: center; justify-content: flex-end; gap: 9px; padding: 17px 28px; border-top: 1px solid #eeedf5; background: #fff; }
+.tour-button { min-height: 40px; padding: 10px 14px; border: 1px solid #e5e4eb; border-radius: 9px; background: #fff; color: #5b6173; font: inherit; font-size: 12px; font-weight: 550; line-height: 1.4; cursor: pointer; }
+.tour-button:hover { border-color: #c3bceb; background: #f9f8ff; color: #5146bd; }
+.tour-button-primary { border-color: #6254d8; background: #6254d8; color: #fff; }
+.tour-button-primary:hover { border-color: #5146bd; background: #5146bd; color: #fff; }
+.tour-outcomes { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.tour-outcome { display: flex; flex-direction: column; align-items: flex-start; gap: 12px; min-width: 0; padding: 20px 17px; border: 1px solid #ddd9ef; border-radius: 14px; background: #fff; color: #667085; font: inherit; font-size: 12px; line-height: 1.6; text-align: left; cursor: pointer; }
+.tour-outcome:hover { border-color: #8f82da; background: #faf9ff; }
+.tour-outcome-state { color: #6254b5; font-size: 9px; font-weight: 700; letter-spacing: .08em; }
+.tour-outcome strong { color: #263245; font-size: 16px; font-weight: 600; line-height: 1.4; }
+.tour-outcome-action { margin-top: auto; color: #5146bd; font-weight: 600; }
+.tour-secondary-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 15px; margin-top: 18px; }
+.tour-secondary-actions .tour-button { min-height: 30px; padding: 4px 0; border-color: transparent; background: transparent; font-size: 11px; }
+.tour-download { padding: 5px 0; color: #667085; font-size: 11px; text-underline-offset: 3px; }
+.tour-download:hover { color: #5146bd; }
+@media (max-width: 560px) {
+  .tour-overlay { padding: 10px; }
+  .tour-dialog { max-height: calc(100dvh - 20px); border-radius: 17px; }
+  .tour-header { padding: 20px 18px 17px; }
+  .tour-header h2 { font-size: 20px; }
+  .tour-progress { gap: 5px; padding: 0 18px 17px; }
+  .tour-progress-item { gap: 5px; font-size: 10px; }
+  .tour-content { padding: 20px 18px; }
+  .tour-step-title { font-size: 19px; }
+  .tour-navigation { gap: 7px; padding: 15px 18px; }
+  .tour-navigation .tour-button { flex: 1 1 auto; font-size: 11px; }
+  .tour-outcomes { grid-template-columns: 1fr; }
+  .tour-outcome { gap: 9px; padding: 16px; }
+  .tour-detail { grid-template-columns: 1fr; gap: 3px; }
+  .tour-mission, .tour-learning { padding: 17px; }
+}
+
+</style>
+</head>
+<body data-tour-replay>
+<main class="replay-page">
+<p class="replay-label">GUIDED EXAMPLE · FICTIONAL · NO LIVE AI</p>
+<h1>A question. A small test.<br>A better next decision.</h1>
+<p>This offline example shows how Lia can connect a conversation, a mission, and a change in direction. Every reply and result here is pre-written. No account or internet connection is needed.</p>
+<button type="button" class="tour-button tour-button-primary" id="start-demo">Try Lia in 2 minutes</button>
+<h2>The fictional example at a glance</h2>
+<ol class="replay-recap">
+<li><strong>Context:</strong> a founder is testing the first booking experience for independent tutors.</li>
+<li><strong>Mission:</strong> observe 3 tutors using a prototype. Target: at least 2 finish unaided within 2 minutes. The founder approves the test.</li>
+<li><strong>Result:</strong> choose between 3 successful bookings or only 1 successful booking, with confusion at “Confirm slot”.</li>
+<li><strong>Learning:</strong> a missed target changes the mission to clarifying confirmation and repeating the test. A met target shifts the next question to rescheduling.</li>
+</ol>
+<p class="replay-note">This is a product demonstration, not real research, measured traction, verified rewards, or a live model response. Nothing is sent or stored.</p>
+<label for="chat-input">Your project notes (offline; not saved)</label>
+<textarea id="chat-input" rows="3" placeholder="A question you want to test in your own project…"></textarea>
+<p class="replay-note">This page cannot contact Lia. Return to the running Bueeld Lab app to use the real chat.</p>
+</main>
+<script>
+/* A deterministic walkthrough. It never invokes AI or changes project data. */
+(() => {
+  "use strict";
+
+  const LABEL = "Guided example · fictional · no live AI";
+  const STEP_NAMES = ["Context", "Mission", "Result", "Learning"];
+  let overlay;
+  let dialog;
+  let content;
+  let navigation;
+  let progress;
+  let step = 0;
+  let outcome = null;
+  let returnFocus = null;
+  let inertElements = [];
+
+  function node(tag, className, text) {
+    const element = document.createElement(tag);
+    if (className) element.className = className;
+    if (text !== undefined) element.textContent = text;
+    return element;
+  }
+
+  function button(label, action, primary = false) {
+    const element = node("button", primary ? "tour-button tour-button-primary" : "tour-button", label);
+    element.type = "button";
+    element.addEventListener("click", action);
+    return element;
+  }
+
+  function message(author, text, isFounder = false) {
+    const element = node("div", `tour-message${isFounder ? " tour-message-founder" : ""}`);
+    element.append(node("p", "tour-author", author), node("p", "tour-message-text", text));
+    return element;
+  }
+
+  function detail(label, text) {
+    const element = node("div", "tour-detail");
+    element.append(node("dt", "", label), node("dd", "", text));
+    return element;
+  }
+
+  function closeDemoTour(focusComposer = false) {
+    if (!overlay || overlay.hidden) return;
+    overlay.hidden = true;
+    inertElements.forEach(([element, wasInert]) => { element.inert = wasInert; });
+    inertElements = [];
+    const composer = focusComposer ? document.getElementById("chat-input") : null;
+    const target = composer || returnFocus;
+    if (target && target.isConnected && typeof target.focus === "function") target.focus();
+  }
+
+  function renderStep() {
+    content.replaceChildren();
+    navigation.replaceChildren();
+    progress.replaceChildren();
+    STEP_NAMES.forEach((name, index) => {
+      const item = node("li", `tour-progress-item${index === step ? " is-current" : ""}${index < step ? " is-complete" : ""}`);
+      if (index === step) item.setAttribute("aria-current", "step");
+      item.append(node("span", "tour-step-number", String(index + 1)), node("span", "", name));
+      progress.append(item);
+    });
+
+    const headings = ["A real question to start from.", "One small test. Your call.", "Bring back what happened.", "The evidence changes the next move."];
+    const heading = node("h3", "tour-step-title", headings[step]);
+    heading.id = "tour-step-title";
+    heading.tabIndex = -1;
+    content.append(node("p", "tour-step-kicker", `STEP ${step + 1} OF 4`), heading);
+
+    if (step === 0) {
+      content.append(
+        message("Founder · fictional", "I’m building a booking tool for independent tutors. Before I build more, I need to know if tutors can create their first booking without help.", true),
+        message("Lia · scripted example", "Let’s test that specific assumption. Your next decision is whether to improve onboarding or move on to the booking workflow."),
+        node("p", "tour-note", "This walkthrough uses a made-up project. Every reply is pre-written; nothing is sent or saved.")
+      );
+      navigation.append(button("See the proposed mission", () => { step = 1; renderStep(); }, true));
+    }
+
+    if (step === 1) {
+      const mission = node("section", "tour-mission");
+      mission.setAttribute("aria-label", "Example proposed mission");
+      mission.append(node("p", "tour-card-kicker", "PROPOSED MISSION"), node("h4", "", "Test the first booking with 3 tutors"));
+      const details = node("dl", "tour-details");
+      details.append(
+        detail("Assumption", "Tutors can create a first booking without guidance."),
+        detail("Test", "Ask 3 tutors to book a first session on the prototype. Observe without coaching."),
+        detail("Success target", "At least 2 of 3 finish without help within 2 minutes."),
+        detail("Bring back", "Completion count, time taken, and where anyone gets stuck.")
+      );
+      mission.append(details);
+      content.append(message("Lia · scripted example", "Here’s a small experiment. You decide whether to take it on."), mission, node("p", "tour-note", "Approving here only advances this example. It creates no real mission."));
+      navigation.append(button("Back", () => { step = 0; renderStep(); }), button("Approve example mission", () => { step = 2; renderStep(); }, true));
+    }
+
+    if (step === 2) {
+      content.append(message("Lia · scripted example", "A test is useful even when the target is missed. Choose a fictional result to see how it changes the next decision."));
+      const choices = node("div", "tour-outcomes");
+      const met = button("", () => { outcome = "met"; step = 3; renderStep(); });
+      met.className = "tour-outcome";
+      met.append(node("span", "tour-outcome-state", "TARGET MET"), node("strong", "", "3 of 3 finish without help"), node("span", "", "All finish in under 2 minutes. Two ask how to handle a reschedule."), node("span", "tour-outcome-action", "Explore this result →"));
+      const missed = button("", () => { outcome = "missed"; step = 3; renderStep(); });
+      missed.className = "tour-outcome";
+      missed.append(node("span", "tour-outcome-state", "TARGET MISSED"), node("strong", "", "1 of 3 finishes without help"), node("span", "", "Two get stuck on “Confirm slot” and ask whether the booking is final."), node("span", "tour-outcome-action", "Explore this result →"));
+      choices.append(met, missed);
+      content.append(choices, node("p", "tour-note", "These are fictional observations, not customer research or measured results."));
+      navigation.append(button("Back", () => { step = 1; renderStep(); }));
+    }
+
+    if (step === 3) {
+      const missed = outcome === "missed";
+      const learning = node("section", "tour-learning");
+      learning.append(node("p", "tour-card-kicker", missed ? "TARGET MISSED · A USEFUL CHANGE OF DIRECTION" : "TARGET MET · A NEXT QUESTION TO TEST"));
+      const details = node("dl", "tour-details");
+      details.append(
+        detail("Before", "We expected tutors to create a first booking without guidance."),
+        detail("Observed", missed ? "Only 1 of 3 finished independently. Two hesitated at “Confirm slot”." : "All 3 finished independently in under 2 minutes. Two asked about rescheduling."),
+        detail("Decision", missed ? "Pause new booking features. Clarify the confirmation step before expanding the workflow." : "Keep the first-booking flow for now. Explore rescheduling as the next problem to understand."),
+        detail("Next mission", missed ? "Change “Confirm slot” to “Confirm booking”, add a clear confirmation screen, then repeat the same test with 3 new tutors. Keep the target: 2 of 3 finish independently within 2 minutes." : "Ask 3 tutors to walk through their most recent reschedule. Identify a repeated difficulty before deciding what to build.")
+      );
+      learning.append(details);
+      content.append(learning, node("p", "tour-note", "Three fictional observations illustrate a decision loop; they are not proof of product-market fit. No XP or rewards are added to your project."));
+      navigation.append(button("Try the other result", () => { step = 2; renderStep(); }), button("Try with my project", () => closeDemoTour(true), true));
+    }
+
+    const footer = node("div", "tour-secondary-actions");
+    if (step > 0) footer.append(button("Replay from the start", () => { step = 0; outcome = null; renderStep(); }));
+    if (!document.body.hasAttribute("data-tour-replay")) {
+      const download = node("a", "tour-download", "Download offline example");
+      download.href = "./demo-replay.html";
+      download.download = "lia-guided-example.html";
+      footer.append(download);
+    }
+    content.append(footer);
+    content.scrollTop = 0;
+    heading.focus();
+  }
+
+  function initDemoTour() {
+    if (overlay) return;
+    overlay = node("div", "tour-overlay");
+    overlay.id = "tour-overlay";
+    overlay.hidden = true;
+    dialog = node("section", "tour-dialog");
+    dialog.setAttribute("role", "dialog");
+    dialog.setAttribute("aria-modal", "true");
+    dialog.setAttribute("aria-labelledby", "tour-title");
+    dialog.setAttribute("aria-describedby", "tour-disclosure");
+    const header = node("header", "tour-header");
+    const identity = node("div", "");
+    const title = node("h2", "", "Try Lia in 2 minutes");
+    title.id = "tour-title";
+    const disclosure = node("p", "tour-disclosure", LABEL);
+    disclosure.id = "tour-disclosure";
+    identity.append(title, disclosure);
+    const close = button("×", () => closeDemoTour());
+    close.className = "tour-close";
+    close.setAttribute("aria-label", "Close guided example");
+    header.append(identity, close);
+    progress = node("ol", "tour-progress");
+    progress.setAttribute("aria-label", "Example progress");
+    content = node("div", "tour-content");
+    navigation = node("div", "tour-navigation");
+    dialog.append(header, progress, content, navigation);
+    overlay.append(dialog);
+    document.body.append(overlay);
+    overlay.addEventListener("click", (event) => { if (event.target === overlay) closeDemoTour(); });
+    dialog.addEventListener("keydown", (event) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        event.stopPropagation();
+        closeDemoTour();
+      }
+      if (event.key !== "Tab") return;
+      const targets = Array.from(dialog.querySelectorAll('button:not([disabled]), a[href], [tabindex="0"]')).filter(element => !element.hidden);
+      const first = targets[0];
+      const last = targets[targets.length - 1];
+      if (!first) { event.preventDefault(); return; }
+      const active = document.activeElement;
+      if (event.shiftKey && (active === first || !targets.includes(active))) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && (active === last || !targets.includes(active))) {
+        event.preventDefault();
+        first.focus();
+      }
+    });
+    const launcher = document.getElementById("start-demo");
+    if (launcher) launcher.addEventListener("click", startDemoTour);
+  }
+
+  function startDemoTour() {
+    initDemoTour();
+    if (!overlay.hidden) return;
+    returnFocus = document.activeElement;
+    inertElements = Array.from(document.body.children)
+      .filter(element => element !== overlay && element instanceof HTMLElement)
+      .map(element => [element, element.inert]);
+    inertElements.forEach(([element]) => { element.inert = true; });
+    step = 0;
+    outcome = null;
+    overlay.hidden = false;
+    renderStep();
+  }
+
+  window.initDemoTour = initDemoTour;
+  window.startDemoTour = startDemoTour;
+})();
+
+initDemoTour();
+</script>
+</body>
+</html>

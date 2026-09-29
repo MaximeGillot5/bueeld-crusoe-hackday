@@ -1,0 +1,169 @@
+/* Compact progress: three fixed views, one clear next action. */
+.mission-drawer { padding: 20px; }
+.mission-panel { width: min(660px, 100%); height: 548px; max-height: calc(100dvh - 40px); overflow: hidden; border: 0; border-radius: 22px; background: #fff; box-shadow: 0 28px 100px rgba(26, 18, 72, .25); }
+.mission-panel-header { position: relative; display: block; flex: 0 0 208px; min-height: 0; padding: 25px 28px 22px; overflow: hidden; border: 0; background: radial-gradient(ellipse at 90% 20%, #7461ed 0%, transparent 55%), linear-gradient(120deg, #4433ca, #5540dc); }
+.mission-panel-header::after { content: ""; position: absolute; width: 300px; height: 300px; top: -150px; right: -65px; border: 1px solid rgba(235, 224, 255, .1); border-radius: 50%; pointer-events: none; }
+.mission-hero-art { position: absolute; right: 12px; top: 4px; width: 235px; height: 208px; pointer-events: none; }
+.mission-hero-art > img { display: block; width: 100%; height: 100%; object-fit: contain; }
+.mission-hero-art > span { position: absolute; left: 46%; top: 45%; color: #f4eaff; font-size: 68px; font-weight: 750; line-height: 1; letter-spacing: -.06em; text-shadow: 1px 2px 0 #ae91dd, 2px 4px 0 #9373c5, 3px 5px 8px rgba(65, 37, 104, .2); transform: translate(-50%, -50%) rotate(14deg) skew(-8deg); }
+.mission-hero-copy { position: relative; z-index: 1; width: 66%; }
+.mission-panel-header .mission-panel-kicker { display: flex; align-items: center; gap: 12px; margin: 0 0 15px; color: #fff; font-size: 10px; font-weight: 650; line-height: 1.4; letter-spacing: .13em; }
+.mission-panel-kicker > span { color: #c9bfff; font-size: 8px; letter-spacing: .11em; }
+.mission-panel-header h2 { margin: 0; color: #fff; font-size: 40px; font-weight: 700; line-height: 1.12; letter-spacing: -.04em; white-space: nowrap; }
+.mission-panel-header .mission-hero-subtitle { margin: 8px 0 0; color: #e2dcff; font-size: 15px; line-height: 1.4; }
+.mission-level-summary { display: flex; align-items: center; gap: 11px; margin-top: 22px; }
+.mission-level-summary > p { flex: 0 0 auto; margin: 0; color: #fff; font-size: 10px; font-weight: 700; line-height: 1.4; letter-spacing: .09em; }
+.mission-level-summary > span { color: #ddd5ff; font-size: 11px; line-height: 1.4; }
+.mission-level-track { position: relative; width: 88%; height: 8px; margin-top: 10px; }
+.mission-level-track progress { display: block; width: 100%; height: 6px; overflow: hidden; border: 0; border-radius: 6px; background: rgba(226, 214, 255, .24); accent-color: #ddd0ff; }
+.mission-level-track progress::-webkit-progress-bar { border-radius: 6px; background: rgba(226, 214, 255, .24); }
+.mission-level-track progress::-webkit-progress-value { border-radius: 6px; background: #e5d7ff; }
+.mission-level-track progress::-moz-progress-bar { border-radius: 6px; background: #e5d7ff; }
+.mission-level-track > img { position: absolute; top: -3px; left: calc(50% - 6px); width: 12px; height: 12px; filter: brightness(0) invert(1); }
+.mission-level-track > img:last-child { left: auto; right: -1px; }
+.mission-panel-close { position: absolute; z-index: 2; top: 12px; right: 12px; display: grid; place-items: center; width: 32px; height: 32px; min-height: 32px; border: 0; border-radius: 50%; padding: 6px; background: rgba(43, 26, 116, .1); }
+.mission-panel-close:hover { background: rgba(255, 255, 255, .18); }
+.mission-panel-close img { width: 20px; height: 20px; }
+.progress-stage { flex: 1 1 auto; min-height: 0; padding: 0 28px; }
+.progress-view { height: 100%; min-height: 0; }
+.progress-overview { display: flex; flex-direction: column; }
+.mission-panel .mission-metrics { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 0; flex: 0 0 64px; margin: 0; border: 0; border-bottom: 1px solid #efedf5; padding: 16px 0; }
+.mission-panel .mission-metric { display: flex; flex-direction: row; align-items: center; gap: 8px; min-width: 0; min-height: 0; border: 0; border-radius: 0; padding: 0; background: transparent; }
+.mission-panel .mission-metric + .mission-metric { border-left: 1px solid #efedf5; padding-left: 26px; }
+.mission-panel .mission-metric > img { flex: 0 0 25px; width: 25px; height: 25px; margin-right: 5px; }
+.mission-panel .mission-metric > strong { color: #172033; font-size: 27px; font-weight: 650; line-height: 1; letter-spacing: -.035em; font-variant-numeric: tabular-nums; }
+.mission-panel .mission-metric > span { color: #788092; font-size: 13px; font-weight: 400; letter-spacing: 0; }
+.mission-evidence-overview { flex: 1 1 auto; display: flex; flex-direction: column; justify-content: center; min-height: 90px; padding: 10px 0; }
+.mission-evidence-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.mission-evidence-heading h3 { margin: 0; color: #293146; font-size: 13px; font-weight: 600; line-height: 1.3; }
+.mission-evidence-heading > strong { color: #6c608e; font-size: 13px; line-height: 1.3; font-weight: 600; font-variant-numeric: tabular-nums; }
+.mission-panel .mission-coverage { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; margin-top: 14px; }
+.mission-panel .mission-coverage-item { display: flex; align-items: center; justify-content: center; gap: 7px; min-width: 0; border: 0; border-radius: 0; padding: 0; background: transparent; color: #798091; font-size: 12px; font-weight: 400; line-height: 1.35; text-align: center; }
+.mission-panel .mission-coverage-item.is-covered { color: #087d77; }
+.mission-coverage-marker { flex: 0 0 19px; width: 19px; height: 19px; }
+.progress-primary-action { flex: 0 0 auto; margin: 0 0 19px; }
+.mission-panel .mission-current-empty { margin: 0; }
+.mission-panel .mission-start-button, .mission-panel .mission-return-chat { display: flex; align-items: center; justify-content: center; gap: 11px; width: 100%; min-height: 46px; margin: 0; border: 0; border-radius: 11px; padding: 11px 16px; background: #6049dc; color: #fff; font-size: 15px; font-weight: 600; line-height: 1.3; text-align: center; transition: background .16s ease, transform .16s ease; }
+.mission-panel .mission-start-button:hover:not(:disabled), .mission-panel .mission-return-chat:hover:not(:disabled) { background: #5039c5; transform: translateY(-1px); }
+.mission-panel .mission-start-button img, .mission-panel .mission-return-chat img { flex: 0 0 18px; width: 18px; height: 18px; }
+.progress-tabs { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); flex: 0 0 auto; gap: 4px; margin: 0 28px; border-top: 1px solid #efedf5; padding: 10px 0 0; }
+.progress-tabs > button { display: flex; align-items: center; justify-content: center; gap: 7px; min-width: 0; min-height: 37px; border: 0; border-radius: 8px; padding: 8px 7px; background: transparent; color: #838798; font-size: 12px; font-weight: 500; line-height: 1.3; white-space: nowrap; }
+.progress-tabs > button:hover { background: #faf9fd; color: #5440bd; }
+.progress-tabs > button[aria-selected="true"] { background: #f1edfc; color: #5a42ca; font-weight: 600; }
+.progress-tabs img { width: 16px; height: 16px; }
+.mission-panel .mission-history-count { min-width: 17px; margin: 0; border-radius: 5px; padding: 1px 4px; background: #eeebf5; color: #7b7391; font-size: 9px; line-height: 1.3; }
+.mission-progress-footnote { flex: 0 0 auto; margin: 9px 0 12px; color: #9b9baa; font-size: 10px; line-height: 1.3; text-align: center; }
+.mission-progress-footnote span { margin: 0 3px; }
+.progress-view-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; padding: 19px 0 12px; }
+.progress-view-heading h3 { margin: 0; color: #24273b; font-size: 17px; font-weight: 600; line-height: 1.4; }
+.progress-view-heading p { margin: 3px 0 0; color: #8c8c9d; font-size: 12px; line-height: 1.4; }
+.progress-history-view { display: flex; flex-direction: column; }
+.progress-history-view .mission-text-button { font-size: 11px; }
+.mission-panel .mission-history { flex: 1 1 auto; display: flex; min-height: 0; margin: 0; padding: 0; }
+.mission-panel .mission-history-item { flex: 1; display: flex; flex-direction: column; justify-content: flex-start; min-width: 0; border: 1px solid #eeeaf6; border-radius: 10px; padding: 13px 15px; background: #fcfbff; }
+.mission-panel .mission-history-meta { gap: 8px; align-items: baseline; }
+.mission-panel .mission-history-meta strong { color: #63568a; font-size: 11px; font-weight: 500; }
+.mission-panel .mission-history-meta time { flex: 0 0 auto; font-size: 10px; }
+.mission-panel .mission-history-item p { margin: 9px 0; color: #394155; font-size: 13px; line-height: 1.5; overflow-wrap: anywhere; }
+.mission-panel .mission-history-actions { margin-top: auto; }
+.mission-panel .mission-history-actions button { min-height: 29px; border: 0; padding: 5px 0 0; background: transparent; color: #6049ce; font-size: 12px; font-weight: 600; }
+.mission-panel .mission-history-empty { align-self: center; width: 100%; margin: auto 0; border: 1px dashed #e6e0f3; border-radius: 12px; padding: 28px 16px; background: #fcfbfe; color: #9690a5; font-size: 13px; text-align: center; }
+.progress-history-pagination { display: flex; flex: 0 0 36px; align-items: center; justify-content: center; gap: 16px; }
+.progress-history-pagination > button { display: grid; place-items: center; width: 28px; min-height: 28px; border: 1px solid #eeeaf5; border-radius: 7px; padding: 4px; background: #fff; }
+.progress-history-pagination > button:disabled { opacity: .3; }
+#progress-history-prev img { transform: rotate(180deg); }
+#progress-history-page { color: #888394; font-size: 11px; font-variant-numeric: tabular-nums; }
+.progress-help-view { display: flex; flex-direction: column; padding-top: 16px; }
+.progress-rules { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); margin: 0 0 10px; border-radius: 10px; padding: 10px 0; background: #f7f4fe; }
+.progress-rules > p { display: grid; gap: 3px; margin: 0; text-align: center; }
+.progress-rules > p + p { border-left: 1px solid #eae3f8; }
+.progress-rules strong { color: #6047bb; font-size: 15px; font-weight: 600; line-height: 1.3; }
+.progress-rules span { color: #988aac; font-size: 10px; line-height: 1.4; }
+.mission-panel .mission-milestones { flex: 1; display: grid; align-content: space-evenly; gap: 0; min-height: 0; margin: 0; }
+.mission-panel .mission-milestones > * { display: grid; gap: 2px; border: 0; border-radius: 0; padding: 6px 0 6px 21px; background: transparent; color: #8d879b; font-size: 11px; font-weight: 400; line-height: 1.35; position: relative; }
+.mission-panel .mission-milestones > *::before { content: ""; position: absolute; left: 1px; top: 10px; width: 9px; height: 9px; border: 1px solid #d2c9e0; border-radius: 50%; }
+.mission-panel .mission-milestones strong { color: #4d465f; font-size: 12px; font-weight: 550; }
+.mission-panel .mission-milestones .is-earned::before { background: #52b4a0; border-color: #52b4a0; box-shadow: inset 0 0 0 2px white; }
+.mission-panel .mission-milestones .is-earned strong { color: #087d77; }
+.progress-help-note { margin: 7px 0 12px; color: #9690a3; font-size: 10px; line-height: 1.4; }
+.mission-panel .mission-notice-section { flex: 0 0 auto; margin: 0 0 8px; border: 0; padding: 0; background: none; color: #087d77; font-size: 11px; }
+.mission-panel .mission-notices { margin: 0; padding: 0; list-style: none; }
+.mission-panel button:focus-visible { outline: 2px solid #8c7feb; outline-offset: 2px; }
+.mission-panel .mission-panel-close:focus-visible { outline-color: #fff; outline-offset: -2px; }
+@media (max-width: 560px) {
+  .mission-drawer { padding: 12px; }
+  .mission-panel { height: 540px; max-height: calc(100dvh - 24px); border-radius: 18px; }
+  .mission-panel-header { flex-basis: 210px; padding: 22px; }
+  .mission-hero-copy { width: 70%; }
+  .mission-hero-art { right: -12px; top: 36px; width: 176px; height: 158px; }
+  .mission-hero-art > span { font-size: 50px; }
+  .mission-panel-kicker > span { display: none; }
+  .mission-panel-header h2 { max-width: 190px; font-size: 30px; white-space: normal; }
+  .mission-panel-header .mission-hero-subtitle { font-size: 12px; margin-top: 8px; }
+  .mission-level-summary { display: flex; gap: 8px; margin-top: 12px; }
+  .mission-level-summary > p { font-size: 9px; }
+  .mission-level-summary > span { margin: 0; font-size: 10px; white-space: nowrap; }
+  .mission-level-track { width: 90%; margin-top: 9px; }
+  .progress-stage { padding: 0 22px; }
+  .mission-panel .mission-metrics { flex-basis: 63px; }
+  .mission-panel .mission-metric { gap: 6px; }
+  .mission-panel .mission-metric + .mission-metric { padding-left: 18px; }
+  .mission-panel .mission-metric > img { width: 23px; height: 23px; flex-basis: 23px; margin-right: 2px; }
+  .mission-panel .mission-metric > strong { font-size: 24px; }
+  .mission-panel .mission-metric > span { font-size: 12px; }
+  .mission-panel .mission-coverage { margin-top: 13px; }
+  .mission-panel .mission-coverage-item { flex-direction: column; gap: 6px; font-size: 11px; }
+  .mission-coverage-marker { flex-basis: 21px; width: 21px; height: 21px; }
+  .progress-primary-action { margin-bottom: 16px; }
+  .progress-tabs { gap: 2px; margin: 0 16px; padding-top: 9px; }
+  .progress-tabs > button { gap: 5px; font-size: 11px; padding: 8px 5px; }
+  .progress-tabs img { width: 14px; height: 14px; }
+  .mission-progress-footnote { margin-bottom: 11px; font-size: 9px; }
+  .progress-view-heading { padding: 12px 0 10px; }
+  .progress-view-heading h3 { font-size: 15px; }
+  .progress-history-pagination { flex-basis: 32px; }
+  .mission-panel .mission-history-meta { flex-wrap: wrap; gap: 2px; }
+  .mission-panel .mission-history-item { padding: 11px 12px; }
+  .mission-panel .mission-history-item p { font-size: 12px; }
+  .progress-help-view { padding-top: 13px; }
+  .progress-rules { padding: 9px 0; margin-bottom: 7px; }
+  .progress-rules strong { font-size: 14px; }
+  .mission-panel .mission-milestones > * { padding-top: 5px; padding-bottom: 5px; font-size: 10px; }
+  .mission-panel .mission-milestones strong { font-size: 11px; }
+  .progress-help-note { margin-top: 5px; font-size: 9px; }
+}
+@media (max-width: 360px) {
+  .mission-panel-header { padding: 21px 18px; }
+  .mission-panel-header h2 { max-width: 165px; font-size: 28px; }
+  .mission-panel-header .mission-hero-subtitle { max-width: none; font-size: 11px; white-space: nowrap; }
+  .mission-hero-art { right: -10px; top: 43px; width: 148px; height: 143px; }
+  .mission-hero-art > span { font-size: 43px; }
+  .mission-level-summary { margin-top: 12px; }
+  .mission-level-track { width: 82%; }
+  .progress-stage { padding: 0 18px; }
+  .mission-panel .mission-metric + .mission-metric { padding-left: 13px; }
+  .mission-panel .mission-metric > strong { font-size: 21px; }
+  .mission-panel .mission-metric > span { font-size: 11px; }
+  .progress-tabs { margin: 0 12px; }
+  .progress-tabs > button { gap: 4px; font-size: 10px; }
+  .progress-tabs img { width: 13px; height: 13px; }
+}
+@media (max-height: 590px) {
+  .mission-panel { height: calc(100dvh - 24px); max-height: calc(100dvh - 24px); }
+  .mission-drawer { padding: 12px; }
+  .mission-panel-header { flex-basis: 180px; padding-top: 17px; padding-bottom: 16px; }
+  .mission-panel-header .mission-panel-kicker { margin-bottom: 10px; }
+  .mission-level-summary { margin-top: 13px; }
+  .mission-hero-art { top: 13px; height: 155px; }
+  .mission-level-track { margin-top: 8px; }
+  .mission-panel .mission-metrics { flex-basis: 55px; padding: 12px 0; }
+  .mission-evidence-overview { min-height: 75px; padding: 7px 0; }
+  .progress-primary-action { margin-bottom: 12px; }
+  .mission-panel .mission-start-button, .mission-panel .mission-return-chat { min-height: 42px; padding-top: 9px; padding-bottom: 9px; }
+  .progress-tabs { padding-top: 7px; }
+  .progress-tabs > button { min-height: 32px; padding-top: 7px; padding-bottom: 7px; }
+  .mission-progress-footnote { margin-top: 7px; margin-bottom: 9px; }
+}
+@media (prefers-reduced-motion: reduce) { .mission-panel *, .mission-panel *::before, .mission-panel *::after { transition: none !important; } }
+
+@media (max-height: 590px) and (max-width: 560px) { .mission-panel-header { flex-basis: 205px; } }
