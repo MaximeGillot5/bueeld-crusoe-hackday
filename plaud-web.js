@@ -1,7 +1,6 @@
 "use strict";
 
-// The Plaud phone bridge only transfers a transcript. A founder still chooses
-// a quote and confirms what was learned before it counts as field evidence.
+// Embedded sync and manual SRT import share exact quote confirmation.
 (() => {
   const byId = (id) => document.getElementById(id);
   const section = byId("plaud-source");
@@ -15,6 +14,7 @@
     listLoading: false,
     detailLoading: false,
     pairing: false,
+    importing: false,
     validating: false,
     transcriptions: [],
     detail: null,
@@ -66,6 +66,10 @@
     return "processing";
   }
 
+  function isManualExport(transcription) {
+    return transcription?.provider === "plaud_export_manual";
+  }
+
   function addText(tag, className, value) {
     const node = document.createElement(tag);
     if (className) node.className = className;
@@ -81,6 +85,7 @@
     state.listLoading = false;
     state.detailLoading = false;
     state.pairing = false;
+    state.importing = false;
     state.validating = false;
     state.transcriptions = [];
     state.detail = null;
@@ -88,6 +93,7 @@
     byId("plaud-pairing-code").textContent = "";
     byId("plaud-pairing-expiry").textContent = "";
     byId("plaud-pairing").hidden = true;
+    byId("plaud-srt-file").value = "";
     byId("plaud-learning").value = "";
     byId("plaud-confirm-real").checked = false;
     byId("plaud-detail").hidden = true;
@@ -99,18 +105,21 @@
   function updateControls() {
     const signedIn = isSignedIn();
     byId("plaud-account-gate").hidden = !isReady() || signedIn;
-    byId("plaud-controls").hidden = !signedIn || state.configured !== true;
+    byId("plaud-controls").hidden = !signedIn;
+    byId("plaud-embedded-controls").hidden = state.configured !== true;
     const availability = byId("plaud-availability");
     if (!isReady()) availability.textContent = "Checking account…";
     else if (!signedIn) availability.textContent = "Lab account required";
     else if (state.statusLoading) availability.textContent = "Checking connection…";
-    else if (state.statusFailed) availability.textContent = "Connection unavailable";
+    else if (state.statusFailed) availability.textContent = "SRT import available";
     else if (state.configured === null) availability.textContent = "Checking connection…";
-    else availability.textContent = state.configured ? "Embedded connection ready" : "Setup required";
-    availability.classList.toggle("is-available", signedIn && state.configured === true);
+    else availability.textContent = state.configured ? "Embedded + SRT ready" : "SRT import available";
+    availability.classList.toggle("is-available", signedIn);
 
     byId("plaud-pair").disabled = !signedIn || !state.configured || state.pairing;
-    byId("plaud-refresh").disabled = !signedIn || !state.configured || state.listLoading;
+    byId("plaud-refresh").disabled = !signedIn || state.listLoading;
+    byId("plaud-srt-file").disabled = !signedIn || state.importing;
+    byId("plaud-srt-import").disabled = !signedIn || state.importing;
     byId("plaud-validate").disabled = !signedIn || state.detail?.status !== "SUCCESS" || state.validating || state.fieldValidated ||
       !byId("plaud-segments").querySelector('input[name="plaud-quote"]:checked') ||
       byId("plaud-learning").value.trim().length < 30 || !byId("plaud-confirm-real").checked;
@@ -131,12 +140,13 @@
       if (generation !== state.generation) return;
       state.configured = data.configured;
       state.statusFailed = false;
-      if (!data.configured) setStatus("Finish the Plaud Embedded setup before connecting the iPhone bridge.");
-      else if (byId("source-drawer").hidden === false) void refreshTranscriptions();
+      if (!data.configured) setStatus("Manual Plaud SRT import is ready. The iPhone bridge needs Plaud Embedded credentials.");
+      if (byId("source-drawer").hidden === false) void refreshTranscriptions();
     } catch (error) {
       if (generation === state.generation) {
         state.statusFailed = true;
-        setStatus(readableError(error), true);
+        setStatus(`${readableError(error)} Manual SRT import remains available.`, true);
+        if (byId("source-drawer").hidden === false) void refreshTranscriptions();
       }
     } finally {
       if (generation === state.generation) {
@@ -150,7 +160,7 @@
     const container = byId("plaud-transcriptions");
     container.replaceChildren();
     if (!state.transcriptions.length) {
-      container.append(addText("p", "plaud-empty", "No Plaud interviews yet. Record and sync one with the iPhone bridge, then refresh this list."));
+      container.append(addText("p", "plaud-empty", "No interviews yet. Sync one with the iPhone bridge or import a Plaud SRT export."));
       return;
     }
     for (const transcription of state.transcriptions) {
@@ -159,6 +169,7 @@
       const details = document.createElement("div");
       details.append(
         addText("strong", "", `${transcription.title || "Plaud interview"} · ${formatDate(transcription.recordedAt || transcription.createdAt)}`),
+        addText("small", "", isManualExport(transcription) ? "User-supplied Plaud SRT export · origin unverified" : "Plaud Embedded transcription"),
         addText("small", "", processing === "ready"
           ? `${Number(transcription.segmentCount) || 0} timestamped segments${Number.isFinite(transcription.duration) ? " · " + formatTime(transcription.duration) : ""}`
           : processing === "failed" ? "Transcription failed · retry from the iPhone bridge" : "Plaud is processing this interview…"),
@@ -175,7 +186,7 @@
   }
 
   async function refreshTranscriptions() {
-    if (!isSignedIn() || !state.configured || state.listLoading) return;
+    if (!isSignedIn() || state.listLoading) return;
     const generation = state.generation;
     state.listLoading = true;
     updateControls();
@@ -189,7 +200,7 @@
       const pending = state.transcriptions.filter((item) => transcriptState(item) === "processing").length;
       setStatus(pending
         ? `${pending} Plaud interview${pending === 1 ? " is" : "s are"} processing. Refresh to check progress.`
-        : state.transcriptions.length ? "Choose an interview to review its exact transcript." : "No interviews have synced yet.");
+        : state.transcriptions.length ? "Choose an interview to review its exact transcript." : "No interviews have been added yet.");
       if (state.detail && transcriptState(state.detail) === "processing" &&
           state.transcriptions.some((item) => item.id === state.detail.id && item.status !== state.detail.status)) {
         void loadDetail(state.detail.id);
@@ -228,6 +239,46 @@
     }
   }
 
+  async function importSrt(event) {
+    event.preventDefault();
+    if (!isSignedIn() || state.importing) return;
+    const file = byId("plaud-srt-file").files?.[0];
+    if (!file || !/\.srt$/i.test(file.name) || file.size < 1 || file.size > 160_000) {
+      setStatus("Choose a Plaud .srt export under 160 KB.", true);
+      return;
+    }
+    const generation = state.generation;
+    state.importing = true;
+    updateControls();
+    setStatus("Importing the Plaud SRT export…");
+    try {
+      const bytes = await file.arrayBuffer();
+      const srt = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+      if (generation !== state.generation || !isSignedIn()) return;
+      const title = file.name.replace(/\.srt$/i, "").slice(0, 120);
+      const result = await accountApi("POST", "/api/plaud/imports/srt", { srt, title });
+      if (generation !== state.generation) return;
+      if (typeof result?.transcription?.id !== "string") throw new Error("The SRT import returned no saved transcript.");
+      byId("plaud-srt-file").value = "";
+      state.transcriptions = [result.transcription,
+        ...state.transcriptions.filter((item) => item.id !== result.transcription.id)]
+        .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+      state.detail = result.transcription;
+      renderList();
+      renderDetail();
+      setStatus(result.duplicate
+        ? "This SRT was already imported. Review its exact quote and confirm your learning."
+        : "SRT imported as a user-supplied file. Review an exact quote and confirm your learning.");
+    } catch (error) {
+      if (generation === state.generation) setStatus(readableError(error), true);
+    } finally {
+      if (generation === state.generation) {
+        state.importing = false;
+        updateControls();
+      }
+    }
+  }
+
   function renderDetail() {
     const transcription = state.detail;
     byId("plaud-detail").hidden = !transcription;
@@ -238,7 +289,7 @@
       formatDate(transcription.createdAt),
       Number.isFinite(transcription.duration) ? formatTime(transcription.duration) : "",
       transcription.language || "",
-      "Source: Plaud Embedded",
+      isManualExport(transcription) ? "Source: manually imported Plaud SRT; origin unverified" : "Source: Plaud Embedded",
     ].filter(Boolean).join(" · ");
     const transcriptReady = transcriptState(transcription) === "ready";
     const transcriptFailed = transcriptState(transcription) === "failed";
@@ -311,7 +362,9 @@
       return;
     }
     const speaker = typeof segment.speaker === "string" && segment.speaker ? `, ${segment.speaker}` : "";
-    const summary = `Founder-confirmed field interview observation: ${learning}\nPlaud transcript quote [${formatTime(segment.start)}${speaker}]: “${segment.text}”`;
+    const sourceLabel = isManualExport(state.detail)
+      ? "User-supplied SRT quote (Plaud origin unverified)" : "Plaud Embedded transcript quote";
+    const summary = `Founder-confirmed field interview observation: ${learning}\n${sourceLabel} [${formatTime(segment.start)}${speaker}]: “${segment.text}”`;
     if (summary.length > 3000) {
       setStatus("This quote and learning are too long for one field observation. Choose a shorter segment.", true);
       return;
@@ -323,7 +376,7 @@
     try {
       await accountApi("POST", "/api/projects/current/milestones/field_observations/validate", {
         source: { kind: "import", reference: "plaud:" + state.detail.id },
-        evidence: { summary, reference: `Plaud transcript ${state.detail.id} at ${formatTime(segment.start)}`, real: true },
+        evidence: { summary, reference: `${sourceLabel} ${state.detail.id} at ${formatTime(segment.start)}`, real: true },
         plaudQuote: { start: segment.start, text: segment.text },
         outcome: "met",
         requestId: crypto.randomUUID(),
@@ -357,6 +410,7 @@
 
   byId("plaud-sign-in").addEventListener("click", () => byId("connector-sign-in")?.click());
   byId("plaud-pair").addEventListener("click", () => { void createPairing(); });
+  byId("plaud-srt-form").addEventListener("submit", importSrt);
   byId("plaud-refresh").addEventListener("click", () => { void refreshTranscriptions(); });
   byId("plaud-detail-close").addEventListener("click", () => {
     state.detail = null;
@@ -376,8 +430,8 @@
   });
   new MutationObserver(() => {
     if (byId("source-drawer").hidden || !isSignedIn()) return;
-    if (state.configured === true) void refreshTranscriptions();
-    else void loadStatus();
+    void refreshTranscriptions();
+    if (state.configured === null) void loadStatus();
   }).observe(byId("source-drawer"), { attributes: true, attributeFilter: ["hidden"] });
 
   updateControls();

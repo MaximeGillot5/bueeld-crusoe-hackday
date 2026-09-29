@@ -375,20 +375,33 @@
 
           <section class="source-section plaud-source" id="plaud-source" aria-labelledby="plaud-source-title">
             <div class="source-section-heading"><div><span class="source-eyebrow">FIELD INTERVIEW · PLAUD</span><h3 id="plaud-source-title">Bring a Plaud interview into BUEELD</h3></div><span class="source-availability" id="plaud-availability">Checking availability…</span></div>
-            <p>Use the temporary iPhone bridge to sync a recording from the Plaud NotePin S. Review timestamped quotes here, then confirm what you actually learned before adding evidence to your project path.</p>
+            <p>Sync a NotePin S recording through the temporary iPhone bridge, or import a timestamped SRT transcript you exported from Plaud Web. Review an exact quote and confirm what you learned before adding field evidence.</p>
             <div id="plaud-account-gate" class="plaud-gate" hidden>
               <p>Sign in to Lab to link your interview to your project.</p>
               <button type="button" class="source-primary" id="plaud-sign-in">Sign in</button>
             </div>
             <div id="plaud-controls" hidden>
-              <div class="plaud-actions">
-                <button type="button" class="source-primary" id="plaud-pair">Connect iPhone bridge</button>
-                <button type="button" id="plaud-refresh">Refresh interviews</button>
+              <div id="plaud-embedded-controls">
+                <div class="plaud-actions">
+                  <button type="button" class="source-primary" id="plaud-pair">Connect iPhone bridge</button>
+                </div>
+                <div class="plaud-pairing" id="plaud-pairing" hidden>
+                  <span>One-time pairing code for the iPhone bridge</span>
+                  <output id="plaud-pairing-code"></output>
+                  <small id="plaud-pairing-expiry"></small>
+                </div>
               </div>
-              <div class="plaud-pairing" id="plaud-pairing" hidden>
-                <span>One-time pairing code for the iPhone bridge</span>
-                <output id="plaud-pairing-code"></output>
-                <small id="plaud-pairing-expiry"></small>
+              <form id="plaud-srt-form" class="plaud-import-form">
+                <strong>Import a Plaud Web transcript (.srt)</strong>
+                <label for="plaud-srt-file">Select the .srt transcript exported from Plaud Web</label>
+                <div class="plaud-import-actions">
+                  <input id="plaud-srt-file" type="file" accept=".srt,application/x-subrip,text/plain" required />
+                  <button type="submit" id="plaud-srt-import">Import SRT</button>
+                </div>
+                <small>This is a manual file import. BUEELD cannot verify the file’s Plaud origin or device, and this path does not use the Plaud Embedded SDK.</small>
+              </form>
+              <div class="plaud-actions">
+                <button type="button" id="plaud-refresh">Refresh interviews</button>
               </div>
               <div id="plaud-transcriptions" class="plaud-transcriptions" aria-label="Plaud interviews"></div>
               <section id="plaud-detail" class="plaud-detail" aria-labelledby="plaud-detail-title" hidden>

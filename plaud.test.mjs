@@ -3,7 +3,7 @@ import { mkdtemp, readFile, rm, stat } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
-import { createPlaudIntegration } from './plaud.mjs';
+import { createPlaudIntegration, parsePlaudSrt } from './plaud.mjs';
 
 const account = (id) => ({ ownerId: id, projectId: id });
 const task = (id, results, status = 'SUCCESS') => ({ transcription_id: id, status,
@@ -55,6 +55,63 @@ test('Plaud is unavailable without all developer credentials', async (t) => {
   assert.equal(plaud.configured, false);
   assert.throws(() => plaud.createPairing(account('founder-123')), { status: 503 });
   assert.deepEqual(await plaud.list(account('founder-123')), []);
+});
+
+test('manual Plaud SRT parser preserves precise timestamps and quoted text', () => {
+  const parsed = parsePlaudSrt('\uFEFF1\r\n00:00:01,250 --> 00:00:03,500\r\nIntervenant 1: Ça prend\r\ntrop de temps.\r\n\r\n2\r\n00:00:04.000 --> 00:00:05.125\r\n<img src=x onerror=alert(1)>\r\n');
+  assert.equal(parsed.duration, 5.125);
+  assert.deepEqual(parsed.segments, [
+    { start: 1.25, end: 3.5, text: 'Intervenant 1: Ça prend trop de temps.', speaker: null },
+    { start: 4, end: 5.125, text: '<img src=x onerror=alert(1)>', speaker: null },
+  ]);
+  assert.match(parsed.text, /Ça prend trop de temps/);
+  for (const bad of [
+    'WEBVTT\n\n00:00:01.000 --> 00:00:02.000\nNo',
+    '1\n00:00:03,000 --> 00:00:02,000\nBackwards',
+    '1\n00:00:01,000 --> 00:00:02,000\n',
+    '1\n00:00:01,000 --> 00:00:02,000\nText\n\nBroken block',
+    `1\n00:00:01,000 --> 00:00:02,000\n${'x'.repeat(2001)}`,
+    '1\n00:00:01,000 --> 00:00:02,000\nBad\u0000text',
+    'x'.repeat(160_001),
+  ]) assert.throws(() => parsePlaudSrt(bad), { status: 400 });
+});
+
+test('manual SRT imports remain private, persistent, and separate from Embedded SDK results', async (t) => {
+  const dataDir = await mkdtemp(join(tmpdir(), 'bueeld-plaud-srt-'));
+  t.after(() => rm(dataDir, { recursive: true, force: true }));
+  let active = true;
+  const options = { dataDir, clientId: '', clientSecret: '', apiKey: '',
+    isOwnerActive: (ownerId) => ownerId !== 'disabled' && active };
+  const plaud = createPlaudIntegration(options);
+  const srt = '1\n00:00:00,000 --> 00:00:02,000\nThe setup is confusing.\n\n2\n00:00:02,500 --> 00:00:04,000\nI would ask for help.\n';
+  const first = await plaud.importSrt({ ...account('founder-123'), srt, title: 'Plaud Web export' });
+  assert.equal(first.duplicate, false);
+  assert.equal(first.transcription.provider, 'plaud_export_manual');
+  assert.equal(first.transcription.status, 'SUCCESS');
+  assert.equal(first.transcription.verifiedAt, null);
+  assert.equal((await plaud.list(account('founder-123')))[0].provider, 'plaud_export_manual');
+  assert.deepEqual(await plaud.list(account('another-founder')), []);
+  await assert.rejects(plaud.get({ ...account('another-founder'), id: first.transcription.id }), { status: 404 });
+  const quote = { start: 0, text: 'The setup is confusing.' };
+  const linked = await plaud.verifyQuote({ ...account('founder-123'),
+    reference: `plaud:${first.transcription.id}`, quote });
+  assert.match(linked.reference, /^User-supplied SRT \(Plaud origin unverified\) 00:00:00:/);
+  await assert.rejects(plaud.verifyQuote({ ...account('founder-123'),
+    reference: `plaud:${first.transcription.id}`, quote: { ...quote, text: 'Invented quote' } }), { status: 409 });
+  const repeated = await plaud.importSrt({ ...account('founder-123'), srt, title: 'Different name' });
+  assert.equal(repeated.duplicate, true);
+  assert.equal(repeated.transcription.id, first.transcription.id);
+  assert.equal((await stat(join(dataDir, 'plaud-transcriptions.json'))).mode & 0o777, 0o600);
+  const restarted = createPlaudIntegration(options);
+  assert.equal((await restarted.get({ ...account('founder-123'), id: first.transcription.id })).provider,
+    'plaud_export_manual');
+  await assert.rejects(plaud.importSrt({ ...account('disabled'), srt }), { status: 401 });
+  active = false;
+  await assert.rejects(plaud.importSrt({ ...account('founder-123'), srt: srt + '\n' }), { status: 401 });
+  active = true;
+  await plaud.deleteOwner('founder-123');
+  assert.deepEqual(await plaud.list(account('founder-123')), []);
+  await assert.rejects(plaud.importSrt({ ...account('founder-123'), srt }), { status: 401 });
 });
 
 test('one-time pairing mints a Plaud user token and a scoped BUEELD ingest token', async (t) => {

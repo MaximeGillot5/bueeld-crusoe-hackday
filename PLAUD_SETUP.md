@@ -10,6 +10,12 @@ BUEELD remains a website. A temporary iPhone bridge uses Plaud Embedded to pair 
 
 Plaud's [quickstart](https://docs.plaud.ai/plaud-embedded/quickstart) explains these credentials. The server exchanges Client ID and Secret Key for a partner token and mints a [user token](https://docs.plaud.ai/plaud-embedded/auth-api-overview) tied to the BUEELD account. The server alone uses the API key to [submit audio](https://docs.plaud.ai/api-reference/transcription-api/submit-audio-for-transcription) and [retrieve the resulting task](https://docs.plaud.ai/api-reference/transcription-api/get-transcription-task).
 
+## Manual SRT fallback for a website demo
+
+If the temporary iPhone bridge is unavailable, open the recording in [Plaud Web](https://web.plaud.ai), choose **Share → Export → Transcript → SRT** with timestamps, and download the file. [Plaud documents SRT transcript export](https://support.plaud.ai/hc/en-us/articles/51023259082393-Export-recordings-transcripts-and-summaries). In BUEELD, sign in to Lab, open Sources → Plaud, and use **Import a Plaud Web transcript (.srt)**. The website accepts a UTF-8 `.srt` file up to 160 KB with at most 2000 timestamped segments. After importing, select an exact quote and confirm the real interview and your learning, just as with an Embedded transcript.
+
+This route stores a **user-supplied file** under the Lab account. BUEELD cannot prove that the file came from Plaud or a NotePin S. The list, detail view, and saved evidence label it as a manual Plaud SRT export. It is not an Embedded SDK ingestion or evidence of an SDK bonus on its own. The file contents stay in the account-bound private transcript store and are removed when that account is deleted.
+
 ## 2. Connect the temporary iPhone bridge
 
 Build the patched Plaud starter using [the companion README](plaud-ios/README.md) and its [step-by-step iPhone guide](plaud-ios/BUEELD-INTEGRATION.md). The patch targets a fixed upstream commit; it is not a prebuilt App Store app. The bridge retrieves its Plaud user token at runtime from pairing. No Plaud API key, Client Secret, or static user token belongs in the iPhone app or its configuration files.

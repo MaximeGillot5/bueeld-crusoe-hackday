@@ -215,17 +215,21 @@ async function askAI(prompt) {
   return response.text;
 }
 
-async function readJSON(req, maxCharacters = 12_000) {
+async function readJSON(req, maxCharacters = 12_000, maxBytes = maxCharacters * 4) {
   if (!String(req.headers['content-type'] || '').startsWith('application/json')) {
     throw Object.assign(new Error('Send JSON'), { status: 415 });
   }
   const timeout = setTimeout(() => req.destroy(new Error('Request body timed out')), 10_000);
   try {
-    let raw = '';
+    const chunks = [];
+    let size = 0;
     for await (const chunk of req) {
-      raw += chunk;
-      if (raw.length > maxCharacters) throw Object.assign(new Error('Input is too long'), { status: 413 });
+      size += chunk.length;
+      if (size > maxBytes) throw Object.assign(new Error('Input is too long'), { status: 413 });
+      chunks.push(chunk);
     }
+    const raw = Buffer.concat(chunks, size).toString('utf8');
+    if (raw.length > maxCharacters) throw Object.assign(new Error('Input is too long'), { status: 413 });
     const parsed = JSON.parse(raw);
     if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
       throw new Error('Expected a JSON object');
@@ -695,6 +699,12 @@ async function apiPlaud(req, res, path) {
     if (path === '/api/plaud/pairings/exchange' && req.method === 'POST') {
       const input = await readJSON(req, 1_000);
       return respond(res, 200, await plaud.exchangePairing(input.code, req.socket?.remoteAddress));
+    }
+    if (path === '/api/plaud/imports/srt' && req.method === 'POST') {
+      const project = authenticatedProject(req, true);
+      const input = await readJSON(req, 350_000, 350_000);
+      const result = await plaud.importSrt({ ...project, srt: input.srt, title: input.title });
+      return respond(res, result.duplicate ? 200 : 201, result);
     }
     if (path === '/api/plaud/transcriptions' && req.method === 'POST') {
       const input = await readJSON(req, 6_000);

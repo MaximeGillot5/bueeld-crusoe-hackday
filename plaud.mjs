@@ -6,6 +6,7 @@ const PLAUD_ORIGIN = 'https://platform-us.plaud.ai';
 const PAIRING_LIFETIME_MS = 10 * 60 * 1000;
 const INGEST_LIFETIME_MS = 24 * 60 * 60 * 1000;
 const MAX_TRANSCRIPTS_PER_OWNER = 30;
+const MAX_SRT_BYTES = 160_000;
 
 function fail(status, message) { return Object.assign(new Error(message), { status }); }
 function tokenHash(token) { return createHash('sha256').update(token).digest('hex'); }
@@ -65,6 +66,39 @@ function numericSeconds(value, label) {
   }
   return value;
 }
+function parseSrtTime(value) {
+  const match = /^(\d{1,2}):([0-5]\d):([0-5]\d)[,.](\d{3})$/.exec(value);
+  if (!match) return null;
+  const seconds = Number(match[1]) * 3600 + Number(match[2]) * 60 +
+    Number(match[3]) + Number(match[4]) / 1000;
+  return seconds <= 86_400 ? seconds : null;
+}
+export function parsePlaudSrt(value) {
+  if (typeof value !== 'string' || !value.trim() || Buffer.byteLength(value, 'utf8') > MAX_SRT_BYTES ||
+      /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f\ufffd]/u.test(value)) {
+    throw fail(400, 'Choose a UTF-8 Plaud SRT export under 160 KB.');
+  }
+  const blocks = value.replace(/^\uFEFF/, '').replace(/\r\n?/g, '\n').trim()
+    .split(/\n[ \t]*\n+/);
+  if (!blocks.length || blocks.length > 2000) throw fail(400, 'The SRT must contain 1 to 2000 subtitle segments.');
+  let textLength = 0;
+  const segments = blocks.map((block) => {
+    const lines = block.split('\n').map((line) => line.trim());
+    if (/^\d+$/.test(lines[0]) && lines.length >= 3) lines.shift();
+    const cue = /^(\d{1,2}:[0-5]\d:[0-5]\d[,.]\d{3})[ \t]*-->[ \t]*(\d{1,2}:[0-5]\d:[0-5]\d[,.]\d{3})(?:[ \t]+.*)?$/.exec(lines.shift() || '');
+    if (!cue) throw fail(400, 'The SRT has a missing or invalid timestamp.');
+    const start = parseSrtTime(cue[1]);
+    const end = parseSrtTime(cue[2]);
+    if (start === null || end === null || end < start) throw fail(400, 'The SRT has an invalid time range.');
+    const text = lines.join(' ').replace(/\s+/gu, ' ').trim();
+    if (!text || text.length > 2000) throw fail(400, 'Each SRT segment needs text under 2000 characters.');
+    textLength += text.length + 1;
+    if (textLength > 120_000) throw fail(400, 'The SRT transcript is too long.');
+    return { start, end, text, speaker: null };
+  });
+  return { segments, text: segments.map((segment) => segment.text).join(' '),
+    duration: Math.max(...segments.map((segment) => segment.end)) };
+}
 function normalizePlaudTask(value, requestedId) {
   if (!value || typeof value !== 'object' || Array.isArray(value) || value.transcription_id !== requestedId) {
     throw fail(502, 'Plaud returned an unexpected transcription task.');
@@ -105,7 +139,7 @@ function publicSummary(item) {
   return { id: item.id, transcriptionId: item.transcriptionId, title: item.title,
     recordedAt: item.recordedAt, createdAt: item.createdAt, verifiedAt: item.verifiedAt,
     status: item.status, language: item.language, duration: item.duration, preview: item.text.slice(0, 180),
-    segmentCount: item.segments.length, provider: 'plaud_embedded' };
+    segmentCount: item.segments.length, provider: item.provider || 'plaud_embedded' };
 }
 function publicDetail(item) { return { ...publicSummary(item), text: item.text, segments: structuredClone(item.segments) }; }
 
@@ -343,6 +377,37 @@ export function createPlaudIntegration({ dataDir, clientId = process.env.PLAUD_C
     finally { if (key && submissions.get(key) === pending) submissions.delete(key); }
   }
 
+  async function importSrt({ ownerId, projectId, srt, title, recordedAt }) {
+    ownerId = identifier(ownerId, 'owner ID');
+    projectId = identifier(projectId, 'project ID');
+    if (revokedOwners.has(ownerId) || !isOwnerActive(ownerId)) {
+      throw fail(401, 'The BUEELD account is no longer active.');
+    }
+    title = optionalString(title, 120, 'title') || 'Plaud SRT export';
+    if (/[\u0000-\u001f\u007f]/u.test(title)) throw fail(400, 'Invalid title.');
+    recordedAt = optionalDate(recordedAt);
+    const parsed = parsePlaudSrt(srt);
+    const importHash = tokenHash(srt.replace(/^\uFEFF/, '').replace(/\r\n?/g, '\n').trim());
+    return mutate((draft) => {
+      if (revokedOwners.has(ownerId) || !isOwnerActive(ownerId)) {
+        throw fail(401, 'The BUEELD account is no longer active.');
+      }
+      const existing = draft.transcriptions.find((item) => item.ownerId === ownerId &&
+        item.projectId === projectId && item.provider === 'plaud_export_manual' && item.importHash === importHash);
+      if (existing) return { changed: false, value: { transcription: publicDetail(existing), duplicate: true } };
+      if (draft.transcriptions.filter((item) => item.ownerId === ownerId).length >= MAX_TRANSCRIPTS_PER_OWNER) {
+        throw fail(429, 'Plaud transcript limit reached for this account.');
+      }
+      const item = { id: randomUUID(), ownerId, projectId, transcriptionId: null,
+        provider: 'plaud_export_manual', importHash, title, recordedAt, externalId: null,
+        createdAt: new Date(now()).toISOString(), status: 'SUCCESS', text: parsed.text,
+        segments: parsed.segments, duration: parsed.duration, language: null,
+        verifiedAt: null, lastCheckedAt: null };
+      draft.transcriptions.push(item);
+      return { changed: true, value: { transcription: publicDetail(item), duplicate: false } };
+    });
+  }
+
   async function refreshPending(item) {
     if (!['PENDING', 'RECEIVED', 'STARTED', 'PROGRESS'].includes(item.status) ||
         (item.lastCheckedAt && Date.parse(item.lastCheckedAt) > now() - 5_000) ||
@@ -420,7 +485,9 @@ export function createPlaudIntegration({ dataDir, clientId = process.env.PLAUD_C
     const selected = item.segments.find((segment) => segment.start === quote.start && segment.text === quote.text);
     if (!selected) throw fail(409, 'The selected quote does not match this Plaud transcript.');
     const clock = new Date(quote.start * 1000).toISOString().slice(11, 19);
-    return { reference: `Plaud ${clock}: ${selected.text.slice(0, 300)}`, transcript: item };
+    const source = item.provider === 'plaud_export_manual'
+      ? 'User-supplied SRT (Plaud origin unverified)' : 'Plaud';
+    return { reference: `${source} ${clock}: ${selected.text.slice(0, 300)}`, transcript: item };
   }
   function deleteOwner(ownerId) {
     ownerId = identifier(ownerId, 'owner ID');
@@ -434,5 +501,6 @@ export function createPlaudIntegration({ dataDir, clientId = process.env.PLAUD_C
         value: { deletedTranscriptions: before - draft.transcriptions.length } };
     });
   }
-  return { configured, createPairing, exchangePairing, submitTranscription, list, get, verifyQuote, deleteOwner };
+  return { configured, createPairing, exchangePairing, submitTranscription, importSrt,
+    list, get, verifyQuote, deleteOwner };
 }

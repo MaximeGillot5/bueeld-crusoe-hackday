@@ -100,7 +100,19 @@ async function run() {
       plaudQuote: { start: 0, text: 'The onboarding takes too long.' } } });
   assert.equal(realQuote.status, 200, JSON.stringify(realQuote.body));
   assert.equal(realQuote.body.transition.gain, 10);
-  console.log('BUEELD Plaud API integration passed: pairing, owner-bound submission, polling, isolation, cited evidence.');
+  const srt = '1\r\n00:00:00,250 --> 00:00:02,000\r\nLa connexion est pénible.\r\n';
+  const noCsrf = await request('/api/plaud/imports/srt', { method: 'POST', cookie: a.cookie,
+    body: { srt, title: 'Manual export' } });
+  assert.equal(noCsrf.status, 403);
+  const imported = await request('/api/plaud/imports/srt', { method: 'POST', cookie: a.cookie,
+    csrf: a.csrf, body: { srt, title: 'Manual export' } });
+  assert.equal(imported.status, 201, JSON.stringify(imported.body));
+  assert.equal(imported.body.transcription.provider, 'plaud_export_manual');
+  const importedId = imported.body.transcription.id;
+  assert.equal((await request(`/api/plaud/transcriptions/${importedId}`, { cookie: b.cookie })).status, 404);
+  assert.equal((await request(`/api/plaud/transcriptions/${importedId}`, { cookie: a.cookie })).body.transcription.segments[0].text,
+    'La connexion est pénible.');
+  console.log('BUEELD Plaud API integration passed: Embedded pairing, private SRT import, polling, isolation, cited evidence.');
 }
 
 try { await run(); }

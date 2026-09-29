@@ -528,7 +528,7 @@ body.canvas-open { overflow: hidden; }
 .source-inline-form input[type="file"] { padding: 5px 8px; }
 .source-inline-form input[type="file"]::file-selector-button { margin-right: 9px; border: 1px solid #d9d5f2; border-radius: 5px; padding: 3px 7px; background: #f7f6ff; color: #5146bd; font: inherit; font-weight: 700; }
 .plaud-source { border-color: #d4e6df; background: linear-gradient(160deg, #ffffff 72%, #f5faf7); }
-.plaud-gate[hidden], .plaud-pairing[hidden], .plaud-detail[hidden], .plaud-evidence-form[hidden], #plaud-controls[hidden] { display: none !important; }
+.plaud-gate[hidden], .plaud-pairing[hidden], .plaud-detail[hidden], .plaud-evidence-form[hidden], #plaud-controls[hidden], #plaud-embedded-controls[hidden] { display: none !important; }
 .plaud-source .source-eyebrow { color: #27785f; }
 .plaud-gate { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; border-radius: 9px; padding: 11px 12px; background: #f5f8f7; }
 .plaud-gate p { margin: 0; color: #475467; font-size: 11.5px; }
@@ -542,6 +542,14 @@ body.canvas-open { overflow: hidden; }
 .plaud-pairing span { color: #356b56; font-size: 10px; font-weight: 700; }
 .plaud-pairing output { color: #123e2d; font-size: 24px; font-weight: 800; letter-spacing: .18em; overflow-wrap: anywhere; }
 .plaud-pairing small { color: #5e7669; font-size: 10.5px; }
+.plaud-import-form { display: grid; gap: 7px; margin-top: 12px; border: 1px solid #dbe6e0; border-radius: 9px; padding: 12px; background: #f8fbf9; }
+.plaud-import-form strong { color: #1f4937; font-size: 11.5px; }
+.plaud-import-form label { color: #475467; font-size: 10.5px; font-weight: 700; }
+.plaud-import-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.plaud-import-actions input { flex: 1 1 220px; min-width: 0; max-width: 100%; color: #344054; font: inherit; font-size: 11px; }
+.plaud-import-actions button { min-height: 36px; border: 1px solid #287a5c; border-radius: 8px; padding: 7px 12px; background: #287a5c; color: #fff; font: inherit; font-size: 11.5px; font-weight: 700; }
+.plaud-import-actions button:disabled { opacity: .5; }
+.plaud-import-form small { color: #667085; font-size: 10.5px; line-height: 1.45; }
 .plaud-transcriptions { display: grid; gap: 8px; margin-top: 10px; }
 .plaud-empty { margin: 0; border: 1px dashed #cadcd3; border-radius: 9px; padding: 13px; color: #667085; font-size: 11.5px; }
 .plaud-interview { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; border: 1px solid #dfe9e3; border-radius: 9px; padding: 11px 12px; background: #fff; }
